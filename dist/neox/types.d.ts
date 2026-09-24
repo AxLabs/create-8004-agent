@@ -1,5 +1,13 @@
 import type { Address, Hex } from "viem";
 export type RegistrationStage = "not-started" | "register-broadcast" | "minted" | "set-uri-broadcast" | "uri-set" | "verified";
+/** ERC-8004 registration-v1 service declaration (A2A, MCP, OASF, or custom). */
+export interface AgentService {
+    name: string;
+    endpoint: string;
+    version?: string;
+    skills?: string[];
+    domains?: string[];
+}
 export interface AgentProjectConfig {
     name: string;
     description: string;
@@ -8,6 +16,7 @@ export interface AgentProjectConfig {
     chainId?: number;
     registry?: Address;
     rpcUrl?: string;
+    services?: AgentService[];
 }
 export interface RegistrationRecord {
     agentId: number | string;
@@ -18,7 +27,7 @@ export interface AgentRegistrationMetadata {
     name: string;
     description: string;
     image: string;
-    services: [];
+    services: AgentService[];
     active: false;
     x402Support: false;
     supportedTrust: [];
@@ -75,6 +84,8 @@ export interface VerificationResult {
     decodedMetadata: AgentRegistrationMetadata;
     metadataMatches: boolean;
     registrationRefMatches: boolean;
+    servicesMatch: boolean;
+    expectedServices: AgentService[];
 }
 export interface SecretFreeRegistrationResult {
     chainId: number;

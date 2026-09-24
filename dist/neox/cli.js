@@ -94,6 +94,17 @@ export async function runNeoxRegistrationCli(config, argv = process.argv.slice(2
         console.log(`Verified agentId ${verification.agentId}`);
         console.log(`  owner:        ${verification.owner}`);
         console.log(`  agentWallet:  ${verification.agentWallet}`);
+        console.log(`  services:     ${verification.decodedMetadata.services.length} declared`);
+        for (const service of verification.decodedMetadata.services) {
+            const extras = [
+                service.version ? `v${service.version}` : null,
+                service.skills?.length ? `${service.skills.length} skill(s)` : null,
+                service.domains?.length ? `${service.domains.length} domain(s)` : null,
+            ]
+                .filter(Boolean)
+                .join(", ");
+            console.log(`    - ${service.name}: ${service.endpoint}${extras ? ` (${extras})` : ""}`);
+        }
         console.log(`  result:       ${resultPath}`);
     }
 }

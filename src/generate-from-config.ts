@@ -16,6 +16,11 @@ export interface GenerateConfigFile {
     agentWallet?: string;
     generatedPrivateKey?: string;
     skipInstall?: boolean;
+    a2aEndpoint?: string;
+    mcpEndpoint?: string;
+    oasfEndpoint?: string;
+    skills?: string[];
+    domains?: string[];
 }
 
 export function wizardAnswersFromConfig(raw: GenerateConfigFile): WizardAnswers {
@@ -36,6 +41,11 @@ export function wizardAnswersFromConfig(raw: GenerateConfigFile): WizardAnswers 
         trustModels: raw.trustModels ?? [],
         agentWallet: raw.agentWallet ?? "",
         generatedPrivateKey: raw.generatedPrivateKey,
+        a2aEndpoint: raw.a2aEndpoint,
+        mcpEndpoint: raw.mcpEndpoint,
+        oasfEndpoint: raw.oasfEndpoint,
+        skills: raw.skills,
+        domains: raw.domains,
     };
 }
 
