@@ -13,6 +13,8 @@ function getFundingInstructions(chain) {
         8453: "ETH", // Base
         137: "MATIC", // Polygon
         143: "MON", // Monad
+        1187947933: "CREDIT", // SKALE Base
+        43114: "AVAX", // Avalanche C-Chain
     };
     if (mainnetChains[chain.chainId]) {
         const token = mainnetChains[chain.chainId];
@@ -24,6 +26,8 @@ function getFundingInstructions(chain) {
         84532: "https://www.coinbase.com/faucets/base-ethereum-goerli-faucet", // Base Sepolia
         80002: "https://faucet.polygon.technology/", // Polygon Amoy
         10143: "https://faucet.monad.xyz/", // Monad Testnet
+        324705682: "https://base-sepolia-faucet.skale.space/", // SKALE Base Sepolia
+        43113: "https://faucet.avax.network/", // Avalanche Fuji
     };
     const faucetUrl = faucets[chain.chainId];
     if (faucetUrl) {

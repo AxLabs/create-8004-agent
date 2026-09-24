@@ -5,97 +5,157 @@ import { execSync } from "child_process";
 import { runWizard, hasFeature, isSolanaChain } from "./wizard.js";
 import { generateProject } from "./generator.js";
 import { maybeRegisterWithFourmica } from "./fourmica.js";
-async function main() {
-    console.log(chalk.bold.cyan("\n🤖 8004 Agent Generator\n"));
-    console.log(chalk.gray("Create a trustless AI agent with A2A, MCP, and x402 support\n"));
-    console.log(chalk.gray("Supports EVM chains (Base, Ethereum, Polygon, Linea) and Solana\n"));
-    try {
-        const answers = await runWizard();
-        console.log("\n");
-        const spinner = ora("Generating project files...").start();
-        await generateProject(answers);
-        const isSolana = isSolanaChain(answers.chain);
-        spinner.succeed(chalk.green(`${isSolana ? "8004" : "ERC-8004"} Agent generated successfully!`));
-        // Install dependencies automatically
-        const installDir = answers.projectDir === "." ? process.cwd() : answers.projectDir;
-        const installSpinner = ora("Installing dependencies...").start();
-        try {
-            execSync("npm install", {
-                cwd: installDir,
-                stdio: "pipe"
-            });
-            installSpinner.succeed(chalk.green("Dependencies installed successfully!"));
+import { readGenerateConfigFile, wizardAnswersFromConfig } from "./generate-from-config.js";
+import { isNeoxChain } from "./neox/constants.js";
+import { NEOX_T4_FAUCET_URL, NEOX_T4_NATIVE_CURRENCY, } from "./neox/constants.js";
+function parseArgs(argv) {
+    const args = { configPath: "", skipInstall: false };
+    for (let i = 0; i < argv.length; i++) {
+        const arg = argv[i];
+        if (arg === "--config" || arg === "-c") {
+            args.configPath = argv[i + 1] ?? "";
+            i++;
         }
-        catch (error) {
-            installSpinner.fail(chalk.yellow("Failed to install dependencies. Run 'npm install' manually."));
+        else if (arg.startsWith("--config=")) {
+            args.configPath = arg.slice("--config=".length);
         }
-        await maybeRegisterWithFourmica(answers);
-        // Print step-by-step guide
-        let step = 1;
-        console.log(chalk.bold.cyan("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
-        console.log(chalk.bold.cyan("  🚀 NEXT STEPS"));
-        console.log(chalk.bold.cyan("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"));
-        // Step 1: Navigate to directory (if not current)
-        if (answers.projectDir !== ".") {
-            console.log(chalk.bold.white(`${step}. Navigate to your project`));
-            console.log(chalk.gray(`   cd ${answers.projectDir}\n`));
-            step++;
+        else if (arg === "--skip-install") {
+            args.skipInstall = true;
         }
-        // Step 2: Wallet info (if generated)
-        if (answers.generatedPrivateKey) {
-            console.log(chalk.bold.white(`${step}. Back up your wallet`));
-            console.log(chalk.yellow("   ⚠️  A new wallet was generated and added to .env"));
-            console.log(chalk.gray(`   Address: ${answers.agentWallet}`));
-            console.log(chalk.gray("   → Back up your .env file!\n"));
-            step++;
+        else if (arg === "--help" || arg === "-h") {
+            printHelp();
+            process.exit(0);
         }
-        // Step 3: Configure .env
-        console.log(chalk.bold.white(`${step}. Configure .env`));
+    }
+    return args;
+}
+function printHelp() {
+    console.log(`create-8004-agent
+
+Usage:
+  create-8004-agent
+  create-8004-agent --config <file.json> [--skip-install]
+
+The --config path uses the same generator as the interactive wizard.
+`);
+}
+function printNextSteps(answers, isSolana, neox) {
+    let step = 1;
+    console.log(chalk.bold.cyan("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
+    console.log(chalk.bold.cyan("  🚀 NEXT STEPS"));
+    console.log(chalk.bold.cyan("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"));
+    if (answers.projectDir !== ".") {
+        console.log(chalk.bold.white(`${step}. Navigate to your project`));
+        console.log(chalk.gray(`   cd ${answers.projectDir}\n`));
+        step++;
+    }
+    if (answers.generatedPrivateKey) {
+        console.log(chalk.bold.white(`${step}. Back up your wallet`));
+        console.log(chalk.yellow("   ⚠️  A new wallet was generated"));
+        console.log(chalk.gray(`   Address: ${answers.agentWallet}`));
+        console.log(chalk.gray("   → Keep the key in a gitignored file; never commit it.\n"));
+        step++;
+    }
+    console.log(chalk.bold.white(`${step}. Configure environment`));
+    if (neox) {
+        console.log(chalk.gray("   - Set PRIVATE_KEY or PRIVATE_KEY_FILE"));
+        console.log(chalk.gray("   - Optional: RPC_URL, IDENTITY_REGISTRY"));
+        console.log(chalk.gray("   - Pinata and OpenAI are not required for Neo X identity registration"));
+    }
+    else {
         if (!answers.generatedPrivateKey) {
             console.log(chalk.gray(`   - Add ${isSolana ? "SOLANA_PRIVATE_KEY" : "PRIVATE_KEY"}`));
         }
         console.log(chalk.gray("   - Add OPENAI_API_KEY"));
         console.log(chalk.gray("   - Add PINATA_JWT (get one at pinata.cloud)"));
-        console.log("");
+    }
+    console.log("");
+    step++;
+    if (isSolana) {
+        console.log(chalk.bold.white(`${step}. Fund your wallet with devnet SOL`));
+        console.log(chalk.gray("   → https://faucet.solana.com/\n"));
+    }
+    else if (neox) {
+        console.log(chalk.bold.white(`${step}. Fund your wallet with Neo X T4 ${NEOX_T4_NATIVE_CURRENCY.symbol}`));
+        console.log(chalk.gray(`   → ${NEOX_T4_FAUCET_URL}\n`));
+    }
+    else {
+        console.log(chalk.bold.white(`${step}. Fund your wallet with testnet ETH`));
+        console.log(chalk.gray("   → https://cloud.google.com/application/web3/faucet/ethereum/sepolia\n"));
+    }
+    step++;
+    if (hasFeature(answers, "a2a")) {
+        console.log(chalk.bold.white(`${step}. Start & deploy your A2A server`));
+        console.log(chalk.cyan("   npm run start:a2a"));
+        console.log(chalk.gray("   → Test locally: http://localhost:3000/.well-known/agent-card.json\n"));
         step++;
-        // Step 4: Fund wallet
-        if (isSolana) {
-            console.log(chalk.bold.white(`${step}. Fund your wallet with devnet SOL`));
-            console.log(chalk.gray(`   → https://faucet.solana.com/\n`));
-        }
-        else {
-            console.log(chalk.bold.white(`${step}. Fund your wallet with testnet ETH`));
-            console.log(chalk.gray(`   → https://cloud.google.com/application/web3/faucet/ethereum/sepolia\n`));
-        }
+    }
+    if (hasFeature(answers, "mcp")) {
+        console.log(chalk.bold.white(`${step}. Start your MCP server`));
+        console.log(chalk.cyan("   npm run start:mcp\n"));
         step++;
-        // Step 5: Start/deploy server BEFORE registering
-        if (hasFeature(answers, "a2a")) {
-            console.log(chalk.bold.white(`${step}. Start & deploy your A2A server`));
-            console.log(chalk.cyan("   npm run start:a2a"));
-            console.log(chalk.gray("   → Test locally: http://localhost:3000/.well-known/agent-card.json"));
-            console.log(chalk.gray("   → Deploy to Railway/Render/etc for public access\n"));
-            step++;
-            console.log(chalk.bold.white(`${step}. Update registration.json with your public URL`));
-            console.log(chalk.gray("   Change the A2A endpoint from example.com to your real URL\n"));
-            step++;
-        }
-        if (hasFeature(answers, "mcp")) {
-            console.log(chalk.bold.white(`${step}. Start your MCP server`));
-            console.log(chalk.cyan("   npm run start:mcp\n"));
-            step++;
-        }
-        // Register AFTER server is hosted
+    }
+    if (neox) {
+        console.log(chalk.bold.white(`${step}. Preflight, register, and verify on Neo X T4`));
+        console.log(chalk.cyan("   npm run preflight"));
+        console.log(chalk.cyan("   npm run register"));
+        console.log(chalk.cyan("   npm run verify\n"));
+        console.log(chalk.gray("   Registration is resumable. A completed project will not mint again."));
+        console.log(chalk.gray("   Explorer: https://xt4scan.ngd.network\n"));
+    }
+    else {
         console.log(chalk.bold.white(`${step}. Register your agent on-chain`));
         console.log(chalk.cyan("   npm run register\n"));
-        step++;
-        console.log(chalk.bold.cyan("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
-        if (isSolana) {
-            console.log(chalk.gray("Learn more: https://8004.org"));
+    }
+    console.log(chalk.bold.cyan("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
+    if (isSolana) {
+        console.log(chalk.gray("Learn more: https://8004.org"));
+    }
+    else {
+        console.log(chalk.gray("Learn more: https://eips.ethereum.org/EIPS/eip-8004"));
+    }
+    console.log("");
+}
+async function generateFromAnswers(answers, skipInstall) {
+    console.log("\n");
+    const spinner = ora("Generating project files...").start();
+    await generateProject(answers);
+    const isSolana = isSolanaChain(answers.chain);
+    const neox = isNeoxChain(answers.chain);
+    spinner.succeed(chalk.green(`${isSolana ? "8004" : "ERC-8004"} Agent generated successfully!`));
+    if (!skipInstall) {
+        const installDir = answers.projectDir === "." ? process.cwd() : answers.projectDir;
+        const installSpinner = ora("Installing dependencies...").start();
+        try {
+            execSync("npm install", {
+                cwd: installDir,
+                stdio: "pipe",
+            });
+            installSpinner.succeed(chalk.green("Dependencies installed successfully!"));
         }
-        else {
-            console.log(chalk.gray("Learn more: https://eips.ethereum.org/EIPS/eip-8004"));
+        catch {
+            installSpinner.fail(chalk.yellow("Failed to install dependencies. Run 'npm install' manually."));
         }
-        console.log("");
+    }
+    if (!neox && !isSolana) {
+        await maybeRegisterWithFourmica(answers);
+    }
+    printNextSteps(answers, isSolana, neox);
+}
+async function main() {
+    console.log(chalk.bold.cyan("\n🤖 8004 Agent Generator\n"));
+    console.log(chalk.gray("Create a trustless AI agent with A2A, MCP, and x402 support\n"));
+    console.log(chalk.gray("Supports EVM chains (including Neo X T4) and Solana\n"));
+    try {
+        const { configPath, skipInstall } = parseArgs(process.argv.slice(2));
+        if (configPath) {
+            const raw = readGenerateConfigFile(configPath);
+            const answers = wizardAnswersFromConfig(raw);
+            await generateFromAnswers(answers, skipInstall || Boolean(raw.skipInstall));
+            return;
+        }
+        const answers = await runWizard();
+        await generateFromAnswers(answers, skipInstall);
     }
     catch (error) {
         console.error(chalk.red("\n❌ Error:"), error);

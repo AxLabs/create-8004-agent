@@ -29,6 +29,17 @@ import {
     generateMonadRegisterScript,
     generateMonadReadme,
 } from "./templates/monad.js";
+// Neo X T4 templates (SDK doesn't support Neo X; direct viem calls)
+import {
+    isNeoxChain,
+    copyNeoxLibrary,
+    generateNeoxPackageJson,
+    generateNeoxEnvExample,
+    generateNeoxAgentConfig,
+    generateNeoxRegisterEntry,
+    generateNeoxReadme,
+    generateNeoxGitignore,
+} from "./templates/neox.js";
 // Shared templates (work for both EVM and Solana)
 import { generateA2AServer, generateAgentCard, generateA2AClient } from "./templates/a2a.js";
 import { generateMCPServer, generateMCPTools } from "./templates/mcp.js";
@@ -49,6 +60,8 @@ export async function generateProject(answers: WizardAnswers): Promise<void> {
         await generateSolanaProject(projectPath, answers);
     } else if (isMonadChain(answers.chain)) {
         await generateMonadProject(projectPath, answers);
+    } else if (isNeoxChain(answers.chain)) {
+        await generateNeoxProject(projectPath, answers);
     } else {
         await generateEVMProject(projectPath, answers);
     }
@@ -112,6 +125,28 @@ async function generateMonadProject(projectPath: string, answers: WizardAnswers)
     await writeFile(projectPath, "tsconfig.json", generateTsConfig());
     await writeFile(projectPath, ".gitignore", generateGitignore());
     await writeFile(projectPath, "README.md", generateMonadReadme(answers, chain));
+}
+
+/**
+ * Generate Neo X T4 project files.
+ *
+ * Direct contract calls (agent0-sdk does not support Neo X).
+ * Registration uses a copied viem library, not the sibling contracts checkout.
+ */
+async function generateNeoxProject(projectPath: string, answers: WizardAnswers): Promise<void> {
+    const chain = CHAINS[answers.chain as keyof typeof CHAINS];
+
+    await copyNeoxLibrary(projectPath);
+    await writeFile(projectPath, "package.json", generateNeoxPackageJson(answers));
+    await writeFile(projectPath, ".env.example", generateNeoxEnvExample(answers, chain));
+    await writeFile(projectPath, "src/agent-config.ts", generateNeoxAgentConfig(answers));
+    await writeFile(projectPath, "src/register.ts", generateNeoxRegisterEntry());
+    if (hasFeature(answers, "a2a") || hasFeature(answers, "mcp")) {
+        await writeFile(projectPath, "src/agent.ts", generateAgentTs(answers));
+    }
+    await writeFile(projectPath, "tsconfig.json", generateTsConfig());
+    await writeFile(projectPath, ".gitignore", generateNeoxGitignore());
+    await writeFile(projectPath, "README.md", generateNeoxReadme(answers, chain));
 }
 
 async function writeFile(projectPath: string, filePath: string, content: string): Promise<void> {

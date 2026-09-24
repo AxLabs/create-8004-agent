@@ -45,6 +45,12 @@ npx create-8004-agent
 That's it! The wizard will guide you through creating your agent.
 If you want 4mica-powered x402 payments, choose a supported chain (Ethereum Sepolia or Polygon Amoy), enable `x402 payments`, and select `4mica` as the provider when prompted.
 
+Noninteractive generation (same generator as the wizard):
+
+```bash
+node dist/index.js --config ./agent.config.json --skip-install
+```
+
 ## What Gets Generated
 
 The wizard creates a complete agent project with:
@@ -93,6 +99,7 @@ my-agent/
 | SKALE Base Sepolia | `0x8004A818BFB912233c491871b3d84c89A494BD9e` | ✅ Available |
 | Avalanche C-Chain  | Via agent0-sdk (chainId 43114)               | ✅ Available |
 | Avalanche Fuji     | Via agent0-sdk (chainId 43113)               | ✅ Available |
+| Neo X T4           | `0x8004A856a396D08d31E597a867B1D8273901e641` | ✅ Direct viem (no Agent0 SDK, no x402) |
 
 ### Solana
 
@@ -134,9 +141,12 @@ npm run register
 
 **EVM chains:** Uploads metadata to IPFS and mints an NFT on the Identity Registry.
 
+**Neo X T4:** Uses direct viem calls. `npm run preflight` is read-only. `npm run register` calls parameterless `register()`, then publishes a base64 data URI with `setAgentURI`. No Pinata or OpenAI key is required. Resume is automatic if minting already succeeded. Explorer: [xt4scan](https://xt4scan.ngd.network). There is no 8004scan route for Neo X.
+
 **Solana:** Validates metadata using `buildRegistrationFileJson()`, uploads to IPFS, and mints a Metaplex Core NFT via the 8004 program.
 
-After registration, view your agent on [8004scan.io](https://www.8004scan.io/).
+After registration on supported Agent0 chains, view your agent on [8004scan.io](https://www.8004scan.io/).
+
 ### 2(b). Updating Your Agent (Optional)
 
 If you update your agent's name, description, image, or [OASF](https://github.com/8004-org/oasf) skills in `src/register.ts`, you need to sync these changes on-chain:

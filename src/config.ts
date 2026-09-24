@@ -1,8 +1,10 @@
+import { NEOX_T4_CHAIN_ID, NEOX_T4_RPC_URL } from "./neox/constants.js";
+
 // Chain configs - SDK handles contract addresses internally
 // x402 facilitators:
 // - PayAI (https://facilitator.payai.network) for Base, Polygon
 // - 4mica (https://x402.4mica.xyz) for Ethereum Sepolia, Polygon Amoy
-// Not supported: Ethereum mainnet, Monad (no facilitator with x402 v2 support)
+// Not supported: Ethereum mainnet, Monad, Neo X (no facilitator with x402 v2 support)
 export type X402Provider = "payai" | "4mica";
 
 export const CHAINS = {
@@ -38,6 +40,8 @@ export const CHAINS = {
         scanPath: "avalanche",
         x402Network: "eip155:43114",
         x402Supported: false, // PayAI facilitator doesn't support Avalanche yet
+        x402Providers: [] as X402Provider[],
+        x402DefaultProvider: null as X402Provider | null,
         facilitatorUrl: null,
         usdcAddress: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", // Native USDC
         usdcName: "USD Coin",
@@ -78,6 +82,8 @@ export const CHAINS = {
         scanPath: "skale-base",
         x402Network: "eip155:1187947933",
         x402Supported: true,
+        x402Providers: ["payai"] as X402Provider[],
+        x402DefaultProvider: "payai" as X402Provider,
         facilitatorUrl: "https://facilitator.payai.network",
         usdcAddress: "0x85889c8c714505E0c94b30fcfcF64fE3Ac8FCb20", // Bridged USDC on SKALE Base
         usdcName: "Bridged USDC (SKALE Bridge)",
@@ -116,6 +122,8 @@ export const CHAINS = {
         scanPath: "avalanche-fuji",
         x402Network: "eip155:43113",
         x402Supported: false,
+        x402Providers: [] as X402Provider[],
+        x402DefaultProvider: null as X402Provider | null,
         facilitatorUrl: null,
         usdcAddress: "0x5425890298aed601595a70AB815c96711a31Bc65", // Circle testnet USDC
         usdcName: "USDC",
@@ -156,11 +164,26 @@ export const CHAINS = {
         scanPath: "skale-base-sepolia",
         x402Network: "eip155:324705682",
         x402Supported: true,
+        x402Providers: ["payai"] as X402Provider[],
+        x402DefaultProvider: "payai" as X402Provider,
         facilitatorUrl: "https://facilitator.payai.network",
         usdcAddress: "0x2e08028E3C4c2356572E096d8EF835cD5C6030bD", // Bridged USDC on SKALE Base Sepolia
         usdcName: "Bridged USDC (SKALE Bridge)",
         usdcSymbol: "USDC.e",
         usdcVersion: "2",
+    },
+    "neox-t4": {
+        name: "Neo X T4 (Testnet)",
+        chainId: NEOX_T4_CHAIN_ID,
+        rpcUrl: NEOX_T4_RPC_URL,
+        // No 8004scan route exists for Neo X; generated projects must use xt4scan.
+        scanPath: "",
+        x402Network: "eip155:12227332",
+        x402Supported: false,
+        x402Providers: [] as X402Provider[],
+        x402DefaultProvider: null as X402Provider | null,
+        facilitatorUrl: null,
+        usdcAddress: null,
     },
 } as const;
 
