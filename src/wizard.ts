@@ -9,8 +9,8 @@ import { SOLANA_CHAINS, isSolanaChain, type SolanaChainKey } from "./config-sola
 import { isNeoxChain } from "./neox/constants.js";
 import {
     defaultA2aAgentCardEndpoint,
-    defaultMcpHttpEndpoint,
     parseOasfTaxonomyInput,
+    validateOptionalRegistrationServiceEndpoint,
     validateRegistrationServiceEndpoint,
 } from "./neox/services.js";
 
@@ -47,9 +47,9 @@ export interface WizardAnswers {
     domains?: string[];
     /** Public agent-card URL for ERC-8004 A2A service metadata (Neo X). */
     a2aEndpoint?: string;
-    /** Public HTTP MCP endpoint for ERC-8004 MCP service metadata (Neo X). */
+    /** Optional public HTTP(S) MCP endpoint for ERC-8004 discovery (Neo X; stdio-only if omitted). */
     mcpEndpoint?: string;
-    /** OASF taxonomy reference endpoint (Neo X). */
+    /** Optional OASF service/resource endpoint for ERC-8004 metadata (Neo X). */
     oasfEndpoint?: string;
 }
 
@@ -229,12 +229,12 @@ export async function runWizard(): Promise<WizardAnswers> {
         {
             type: "input",
             name: "mcpEndpoint",
-            message: "Public MCP HTTP endpoint (ERC-8004 metadata; stdio server needs a gateway):",
-            default: defaultMcpHttpEndpoint(),
+            message:
+                "Public MCP HTTP endpoint for ERC-8004 discovery (optional; leave blank for stdio-only MCP):",
             when: (ans: Partial<RawAnswers>) =>
                 isNeoxChain(ans.chain ?? "") && (ans.features?.includes("mcp") ?? false),
             validate: (input: string) => {
-                const result = validateRegistrationServiceEndpoint("MCP", input);
+                const result = validateOptionalRegistrationServiceEndpoint("MCP", input);
                 return result.ok || result.message;
             },
         },
@@ -253,13 +253,12 @@ export async function runWizard(): Promise<WizardAnswers> {
         {
             type: "input",
             name: "oasfEndpoint",
-            message: "OASF taxonomy reference URL:",
-            default: "https://github.com/8004-org/oasf",
+            message: "OASF service/resource endpoint for ERC-8004 metadata (optional):",
             when: (ans: Partial<RawAnswers>) =>
                 isNeoxChain(ans.chain ?? "") &&
                 Boolean(ans.oasfSkills?.trim() || ans.oasfDomains?.trim()),
             validate: (input: string) => {
-                const result = validateRegistrationServiceEndpoint("OASF", input);
+                const result = validateOptionalRegistrationServiceEndpoint("OASF", input);
                 return result.ok || result.message;
             },
         },
@@ -330,8 +329,8 @@ export async function runWizard(): Promise<WizardAnswers> {
         // Default to false if A2A not selected (question was skipped)
         a2aStreaming: answers.a2aStreaming ?? false,
         a2aEndpoint: answers.a2aEndpoint,
-        mcpEndpoint: answers.mcpEndpoint,
-        oasfEndpoint: answers.oasfEndpoint,
+        mcpEndpoint: answers.mcpEndpoint?.trim() || undefined,
+        oasfEndpoint: answers.oasfEndpoint?.trim() || undefined,
         skills,
         domains,
     };

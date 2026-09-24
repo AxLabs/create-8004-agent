@@ -188,6 +188,8 @@ runNeoxRegistrationCli(AGENT_PROJECT_CONFIG).catch((error: unknown) => {
 export function generateNeoxReadme(answers: WizardAnswers, chain: ChainConfig): string {
     const hasA2A = hasFeature(answers, "a2a");
     const hasMCP = hasFeature(answers, "mcp");
+    const hasOasfTaxonomy =
+        (answers.skills?.length ?? 0) > 0 || (answers.domains?.length ?? 0) > 0;
     return `# ${answers.agentName}
 
 ${answers.agentDescription}
@@ -276,7 +278,10 @@ Edit \`src/agent-config.ts\` → \`services\` before \`npm run register\` or whe
 ${hasA2A ? `
 - **A2A**: must match your deployed agent card at \`/.well-known/agent-card.json\` (local dev: \`npm run start:a2a\` serves the generated card on port 3000).
 ` : ""}${hasMCP ? `
-- **MCP**: the generated server uses stdio (\`npm run start:mcp\`). Advertise only an HTTP(S) URL you actually expose (gateway, sidecar, or host).
+- **MCP (local)**: \`npm run start:mcp\` runs a stdio MCP server — it does not listen on HTTP and is not the ERC-8004 advertised endpoint.
+- **MCP (ERC-8004)**: add an \`MCP\` entry under \`services\` only when you expose a real public HTTP(S) URL (gateway, sidecar, or hosted server). Leave it out for stdio-only MCP.
+` : ""}${hasOasfTaxonomy ? `
+- **OASF**: skills/domains are advertised only together with your own OASF service/resource endpoint in \`services\`. Use the [OASF taxonomy](https://github.com/8004-org/oasf) to pick valid values — do not use the taxonomy repo URL as your agent endpoint.
 ` : ""}
 
 ## Transaction links
@@ -297,11 +302,12 @@ Serves \`.well-known/agent-card.json\` on \`http://localhost:3000\`. Point the A
 npm run start:mcp
 \`\`\`
 
-For ERC-8004 discovery, configure the MCP service endpoint in \`agent-config.ts\` to a reachable HTTP(S) URL when you add a gateway.
+\`npm run start:mcp\` does not serve the HTTP URL in ERC-8004 metadata. When you deploy an HTTP MCP gateway, set that public URL in \`agent-config.ts\` before registration.
 ` : ""}
 ## Resources
 
 - [ERC-8004](https://eips.ethereum.org/EIPS/eip-8004)
+- [OASF taxonomy](https://github.com/8004-org/oasf)
 - [Neo X T4 explorer](${NEOX_T4_EXPLORER_URL})
 `;
 }
