@@ -24,6 +24,20 @@ export declare const CHAINS: {
         readonly facilitatorUrl: "https://facilitator.payai.network";
         readonly usdcAddress: null;
     };
+    readonly "avalanche-mainnet": {
+        readonly name: "Avalanche C-Chain";
+        readonly chainId: 43114;
+        readonly rpcUrl: "https://api.avax.network/ext/bc/C/rpc";
+        readonly scanPath: "avalanche";
+        readonly x402Network: "eip155:43114";
+        readonly x402Supported: false;
+        readonly x402Providers: X402Provider[];
+        readonly x402DefaultProvider: X402Provider | null;
+        readonly facilitatorUrl: null;
+        readonly usdcAddress: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E";
+        readonly usdcName: "USD Coin";
+        readonly usdcVersion: "2";
+    };
     readonly "polygon-mainnet": {
         readonly name: "Polygon Mainnet";
         readonly chainId: 137;
@@ -49,7 +63,22 @@ export declare const CHAINS: {
         readonly x402DefaultProvider: X402Provider | null;
         readonly facilitatorUrl: null;
         readonly usdcAddress: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";
-        readonly usdcName: "USD Coin";
+        readonly usdcName: "USD Circle";
+        readonly usdcVersion: "2";
+    };
+    readonly "skale-base-mainnet": {
+        readonly name: "SKALE Base (Mainnet)";
+        readonly chainId: 1187947933;
+        readonly rpcUrl: "https://skale-base.skalenodes.com/v1/base";
+        readonly scanPath: "skale-base";
+        readonly x402Network: "eip155:1187947933";
+        readonly x402Supported: true;
+        readonly x402Providers: X402Provider[];
+        readonly x402DefaultProvider: X402Provider;
+        readonly facilitatorUrl: "https://facilitator.payai.network";
+        readonly usdcAddress: "0x85889c8c714505E0c94b30fcfcF64fE3Ac8FCb20";
+        readonly usdcName: "Bridged USDC (SKALE Bridge)";
+        readonly usdcSymbol: "USDC.e";
         readonly usdcVersion: "2";
     };
     readonly "eth-sepolia": {
@@ -76,6 +105,20 @@ export declare const CHAINS: {
         readonly facilitatorUrl: "https://facilitator.payai.network";
         readonly usdcAddress: null;
     };
+    readonly "avalanche-fuji": {
+        readonly name: "Avalanche Fuji (Testnet)";
+        readonly chainId: 43113;
+        readonly rpcUrl: "https://api.avax-test.network/ext/bc/C/rpc";
+        readonly scanPath: "avalanche-fuji";
+        readonly x402Network: "eip155:43113";
+        readonly x402Supported: false;
+        readonly x402Providers: X402Provider[];
+        readonly x402DefaultProvider: X402Provider | null;
+        readonly facilitatorUrl: null;
+        readonly usdcAddress: "0x5425890298aed601595a70AB815c96711a31Bc65";
+        readonly usdcName: "USDC";
+        readonly usdcVersion: "2";
+    };
     readonly "polygon-amoy": {
         readonly name: "Polygon Amoy (Testnet)";
         readonly chainId: 80002;
@@ -101,8 +144,35 @@ export declare const CHAINS: {
         readonly x402DefaultProvider: X402Provider | null;
         readonly facilitatorUrl: null;
         readonly usdcAddress: "0x534b2f3A21130d7a60830c2Df862319e593943A3";
-        readonly usdcName: "USD Coin";
+        readonly usdcName: "USD Circle";
         readonly usdcVersion: "2";
+    };
+    readonly "skale-base-sepolia": {
+        readonly name: "SKALE Base Sepolia (Testnet)";
+        readonly chainId: 324705682;
+        readonly rpcUrl: "https://base-sepolia-testnet.skalenodes.com/v1/jubilant-horrible-ancha";
+        readonly scanPath: "skale-base-sepolia";
+        readonly x402Network: "eip155:324705682";
+        readonly x402Supported: true;
+        readonly x402Providers: X402Provider[];
+        readonly x402DefaultProvider: X402Provider;
+        readonly facilitatorUrl: "https://facilitator.payai.network";
+        readonly usdcAddress: "0x2e08028E3C4c2356572E096d8EF835cD5C6030bD";
+        readonly usdcName: "Bridged USDC (SKALE Bridge)";
+        readonly usdcSymbol: "USDC.e";
+        readonly usdcVersion: "2";
+    };
+    readonly "neox-t4": {
+        readonly name: "Neo X T4 (Testnet)";
+        readonly chainId: 12227332;
+        readonly rpcUrl: "https://neoxt4seed1.ngd.network";
+        readonly scanPath: "";
+        readonly x402Network: "eip155:12227332";
+        readonly x402Supported: false;
+        readonly x402Providers: X402Provider[];
+        readonly x402DefaultProvider: X402Provider | null;
+        readonly facilitatorUrl: null;
+        readonly usdcAddress: null;
     };
 };
 export type ChainKey = keyof typeof CHAINS;

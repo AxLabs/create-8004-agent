@@ -1,3 +1,4 @@
+import { NEOX_T4_CHAIN_ID, NEOX_T4_RPC_URL } from "./neox/constants.js";
 export const CHAINS = {
     // ============ MAINNETS ============
     "eth-mainnet": {
@@ -24,6 +25,20 @@ export const CHAINS = {
         facilitatorUrl: "https://facilitator.payai.network",
         usdcAddress: null, // SDK has default
     },
+    "avalanche-mainnet": {
+        name: "Avalanche C-Chain",
+        chainId: 43114,
+        rpcUrl: "https://api.avax.network/ext/bc/C/rpc",
+        scanPath: "avalanche",
+        x402Network: "eip155:43114",
+        x402Supported: false, // PayAI facilitator doesn't support Avalanche yet
+        x402Providers: [],
+        x402DefaultProvider: null,
+        facilitatorUrl: null,
+        usdcAddress: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", // Native USDC
+        usdcName: "USD Coin",
+        usdcVersion: "2",
+    },
     "polygon-mainnet": {
         name: "Polygon Mainnet",
         chainId: 137,
@@ -49,7 +64,22 @@ export const CHAINS = {
         x402DefaultProvider: null,
         facilitatorUrl: null,
         usdcAddress: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603", // Circle USDC
-        usdcName: "USD Coin",
+        usdcName: "USD Circle",
+        usdcVersion: "2",
+    },
+    "skale-base-mainnet": {
+        name: "SKALE Base (Mainnet)",
+        chainId: 1187947933,
+        rpcUrl: "https://skale-base.skalenodes.com/v1/base",
+        scanPath: "skale-base",
+        x402Network: "eip155:1187947933",
+        x402Supported: true,
+        x402Providers: ["payai"],
+        x402DefaultProvider: "payai",
+        facilitatorUrl: "https://facilitator.payai.network",
+        usdcAddress: "0x85889c8c714505E0c94b30fcfcF64fE3Ac8FCb20", // Bridged USDC on SKALE Base
+        usdcName: "Bridged USDC (SKALE Bridge)",
+        usdcSymbol: "USDC.e",
         usdcVersion: "2",
     },
     // ============ TESTNETS ============
@@ -77,6 +107,20 @@ export const CHAINS = {
         facilitatorUrl: "https://facilitator.payai.network",
         usdcAddress: null, // SDK has default
     },
+    "avalanche-fuji": {
+        name: "Avalanche Fuji (Testnet)",
+        chainId: 43113,
+        rpcUrl: "https://api.avax-test.network/ext/bc/C/rpc",
+        scanPath: "avalanche-fuji",
+        x402Network: "eip155:43113",
+        x402Supported: false,
+        x402Providers: [],
+        x402DefaultProvider: null,
+        facilitatorUrl: null,
+        usdcAddress: "0x5425890298aed601595a70AB815c96711a31Bc65", // Circle testnet USDC
+        usdcName: "USDC",
+        usdcVersion: "2",
+    },
     "polygon-amoy": {
         name: "Polygon Amoy (Testnet)",
         chainId: 80002,
@@ -102,8 +146,36 @@ export const CHAINS = {
         x402DefaultProvider: null,
         facilitatorUrl: null,
         usdcAddress: "0x534b2f3A21130d7a60830c2Df862319e593943A3", // Circle testnet USDC
-        usdcName: "USD Coin",
+        usdcName: "USD Circle",
         usdcVersion: "2",
+    },
+    "skale-base-sepolia": {
+        name: "SKALE Base Sepolia (Testnet)",
+        chainId: 324705682,
+        rpcUrl: "https://base-sepolia-testnet.skalenodes.com/v1/jubilant-horrible-ancha",
+        scanPath: "skale-base-sepolia",
+        x402Network: "eip155:324705682",
+        x402Supported: true,
+        x402Providers: ["payai"],
+        x402DefaultProvider: "payai",
+        facilitatorUrl: "https://facilitator.payai.network",
+        usdcAddress: "0x2e08028E3C4c2356572E096d8EF835cD5C6030bD", // Bridged USDC on SKALE Base Sepolia
+        usdcName: "Bridged USDC (SKALE Bridge)",
+        usdcSymbol: "USDC.e",
+        usdcVersion: "2",
+    },
+    "neox-t4": {
+        name: "Neo X T4 (Testnet)",
+        chainId: NEOX_T4_CHAIN_ID,
+        rpcUrl: NEOX_T4_RPC_URL,
+        // No 8004scan route exists for Neo X; generated projects must use xt4scan.
+        scanPath: "",
+        x402Network: "eip155:12227332",
+        x402Supported: false,
+        x402Providers: [],
+        x402DefaultProvider: null,
+        facilitatorUrl: null,
+        usdcAddress: null,
     },
 };
 export const TRUST_MODELS = ["reputation", "crypto-economic", "tee-attestation"];

@@ -1,0 +1,99 @@
+import { NEOX_T4_FAUCET_URL, NEOX_T4_IDENTITY_REGISTRY, NEOX_T4_NATIVE_CURRENCY, explorerAddressUrl, } from "./constants.js";
+import { accountFromPrivateKey, createNeoxPublicClient, createNeoxWalletClient, loadPrivateKeyFromEnv, resolveRuntimeConfig, } from "./config.js";
+import { formatPreflight, runPreflight } from "./preflight.js";
+import { registerOrResume } from "./register.js";
+import { buildSecretFreeResult, writeSecretFreeResult } from "./result.js";
+import { hasMinted, loadState, persistVerified } from "./state.js";
+import { buildRegistrationMetadata, encodeMetadataDataUri, parseAgentId } from "./metadata.js";
+import { verifyOnChain } from "./verify.js";
+import { discoverRegistryLogs } from "./discover.js";
+export function parseNeoxCliCommand(argv = process.argv.slice(2)) {
+    const raw = argv.find((arg) => !arg.startsWith("-")) ?? "register";
+    if (raw === "preflight" ||
+        raw === "dry-run" ||
+        raw === "register" ||
+        raw === "verify" ||
+        raw === "logs") {
+        return raw;
+    }
+    throw new Error(`Unknown command "${raw}". Use preflight, dry-run, register, verify, or logs.`);
+}
+export async function runNeoxRegistrationCli(config, argv = process.argv.slice(2)) {
+    const command = parseNeoxCliCommand(argv);
+    const runtime = resolveRuntimeConfig({
+        rpcUrl: config.rpcUrl,
+        registry: config.registry,
+        chainId: config.chainId,
+    });
+    const projectDir = process.cwd();
+    const privateKey = loadPrivateKeyFromEnv();
+    const account = accountFromPrivateKey(privateKey);
+    const publicClient = createNeoxPublicClient(runtime.rpcUrl);
+    const walletClient = createNeoxWalletClient(runtime.rpcUrl, account);
+    const registry = runtime.registry ?? NEOX_T4_IDENTITY_REGISTRY;
+    let state = loadState(projectDir, config.projectId, registry);
+    const uriForEstimate = hasMinted(state)
+        ? encodeMetadataDataUri(buildRegistrationMetadata(config, parseAgentId(state.agentId), registry))
+        : undefined;
+    if (command === "preflight" || command === "dry-run") {
+        const report = await runPreflight({
+            client: publicClient,
+            registry,
+            signer: account.address,
+            state,
+            uriForEstimate,
+        });
+        console.log(formatPreflight(report));
+        console.log("");
+        console.log(`Fund ${NEOX_T4_NATIVE_CURRENCY.symbol} if needed: ${NEOX_T4_FAUCET_URL}`);
+        console.log(`Signer: ${explorerAddressUrl(account.address)}`);
+        return;
+    }
+    if (command === "logs") {
+        if (!state.registerBlockNumber && !state.setUriBlockNumber) {
+            throw new Error("No receipt block numbers in state. Register first.");
+        }
+        const fromBlock = BigInt(state.registerBlockNumber ?? state.setUriBlockNumber ?? "0");
+        const toBlock = BigInt(state.setUriBlockNumber ?? state.registerBlockNumber ?? "0");
+        const discovered = await discoverRegistryLogs({
+            client: publicClient,
+            registry,
+            fromBlock,
+            toBlock,
+        });
+        console.log(JSON.stringify({ fromBlock: fromBlock.toString(10), toBlock: toBlock.toString(10), discovered }, null, 2));
+        return;
+    }
+    if (command === "register") {
+        state = await registerOrResume({
+            publicClient,
+            walletClient,
+            signer: account.address,
+            registry,
+            projectDir,
+            config,
+        }, state);
+    }
+    if (command === "verify" && !hasMinted(state)) {
+        throw new Error("Nothing to verify yet. Run register first.");
+    }
+    if (command === "register" || command === "verify") {
+        if (!hasMinted(state)) {
+            return;
+        }
+        const verification = await verifyOnChain({
+            client: publicClient,
+            registry,
+            state,
+            config,
+            expectedOwner: account.address,
+        });
+        state = persistVerified(projectDir, state, verification.agentWallet);
+        const resultPath = writeSecretFreeResult(projectDir, buildSecretFreeResult(state, verification));
+        console.log("");
+        console.log(`Verified agentId ${verification.agentId}`);
+        console.log(`  owner:        ${verification.owner}`);
+        console.log(`  agentWallet:  ${verification.agentWallet}`);
+        console.log(`  result:       ${resultPath}`);
+    }
+}
