@@ -6,6 +6,13 @@ import { Keypair } from "@solana/web3.js";
 import bs58 from "bs58";
 import { CHAINS, TRUST_MODELS, type ChainKey, type TrustModel, type X402Provider } from "./config.js";
 import { SOLANA_CHAINS, isSolanaChain, type SolanaChainKey } from "./config-solana.js";
+import { isNeoxChain } from "./neox/constants.js";
+import {
+    defaultA2aAgentCardEndpoint,
+    defaultMcpHttpEndpoint,
+    parseOasfTaxonomyInput,
+    validateRegistrationServiceEndpoint,
+} from "./neox/services.js";
 
 function getAvailableDir(baseDir: string): string {
     if (baseDir === ".") return baseDir;
@@ -39,6 +46,12 @@ export interface WizardAnswers {
     // OASF taxonomy (optional) - https://github.com/8004-org/oasf
     skills?: string[];
     domains?: string[];
+    /** Public agent-card URL for ERC-8004 A2A service metadata (Neo X). */
+    a2aEndpoint?: string;
+    /** Public HTTP MCP endpoint for ERC-8004 MCP service metadata (Neo X). */
+    mcpEndpoint?: string;
+    /** OASF taxonomy reference endpoint (Neo X). */
+    oasfEndpoint?: string;
 }
 
 // Re-export for convenience
@@ -61,6 +74,11 @@ interface RawAnswers {
     trustModels: TrustModel[];
     x402Provider?: X402Provider;
     metadataStorage?: "inline" | "neofs";
+    a2aEndpoint?: string;
+    mcpEndpoint?: string;
+    oasfSkills?: string;
+    oasfDomains?: string;
+    oasfEndpoint?: string;
 }
 
 function getX402Providers(chainKey?: ChainKey | SolanaChainKey): X402Provider[] {
@@ -210,6 +228,55 @@ export async function runWizard(): Promise<WizardAnswers> {
             when: (ans: Partial<RawAnswers>) => ans.features?.includes("a2a") ?? false,
         },
         {
+            type: "input",
+            name: "a2aEndpoint",
+            message: "Public A2A agent-card URL (ERC-8004 metadata):",
+            default: defaultA2aAgentCardEndpoint(),
+            when: (ans: Partial<RawAnswers>) =>
+                isNeoxChain(ans.chain ?? "") && (ans.features?.includes("a2a") ?? false),
+            validate: (input: string) => {
+                const result = validateRegistrationServiceEndpoint("A2A", input);
+                return result.ok || result.message;
+            },
+        },
+        {
+            type: "input",
+            name: "mcpEndpoint",
+            message: "Public MCP HTTP endpoint (ERC-8004 metadata; stdio server needs a gateway):",
+            default: defaultMcpHttpEndpoint(),
+            when: (ans: Partial<RawAnswers>) =>
+                isNeoxChain(ans.chain ?? "") && (ans.features?.includes("mcp") ?? false),
+            validate: (input: string) => {
+                const result = validateRegistrationServiceEndpoint("MCP", input);
+                return result.ok || result.message;
+            },
+        },
+        {
+            type: "input",
+            name: "oasfSkills",
+            message: "OASF skills for on-chain metadata (optional, comma/newline separated):",
+            when: (ans: Partial<RawAnswers>) => isNeoxChain(ans.chain ?? ""),
+        },
+        {
+            type: "input",
+            name: "oasfDomains",
+            message: "OASF domains for on-chain metadata (optional, comma/newline separated):",
+            when: (ans: Partial<RawAnswers>) => isNeoxChain(ans.chain ?? ""),
+        },
+        {
+            type: "input",
+            name: "oasfEndpoint",
+            message: "OASF taxonomy reference URL:",
+            default: "https://github.com/8004-org/oasf",
+            when: (ans: Partial<RawAnswers>) =>
+                isNeoxChain(ans.chain ?? "") &&
+                Boolean(ans.oasfSkills?.trim() || ans.oasfDomains?.trim()),
+            validate: (input: string) => {
+                const result = validateRegistrationServiceEndpoint("OASF", input);
+                return result.ok || result.message;
+            },
+        },
+        {
             type: "checkbox",
             name: "trustModels",
             message: "Supported trust models:",
@@ -253,6 +320,20 @@ export async function runWizard(): Promise<WizardAnswers> {
         }
     }
 
+    let skills: string[] | undefined;
+    let domains: string[] | undefined;
+    if (isNeoxChain(answers.chain)) {
+        try {
+            const parsedSkills = parseOasfTaxonomyInput(answers.oasfSkills);
+            const parsedDomains = parseOasfTaxonomyInput(answers.oasfDomains);
+            skills = parsedSkills.length > 0 ? parsedSkills : undefined;
+            domains = parsedDomains.length > 0 ? parsedDomains : undefined;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(message);
+        }
+    }
+
     return {
         ...answers,
         projectDir,
@@ -262,5 +343,10 @@ export async function runWizard(): Promise<WizardAnswers> {
         metadataStorage: answers.metadataStorage ?? "inline",
         // Default to false if A2A not selected (question was skipped)
         a2aStreaming: answers.a2aStreaming ?? false,
+        a2aEndpoint: answers.a2aEndpoint,
+        mcpEndpoint: answers.mcpEndpoint,
+        oasfEndpoint: answers.oasfEndpoint,
+        skills,
+        domains,
     };
 }

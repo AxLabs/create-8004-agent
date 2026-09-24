@@ -14,6 +14,11 @@ export interface GenerateConfigFile {
     generatedPrivateKey?: string;
     skipInstall?: boolean;
     metadataStorage?: "inline" | "neofs";
+    a2aEndpoint?: string;
+    mcpEndpoint?: string;
+    oasfEndpoint?: string;
+    skills?: string[];
+    domains?: string[];
 }
 export declare function wizardAnswersFromConfig(raw: GenerateConfigFile): WizardAnswers;
 export declare function readGenerateConfigFile(configPath: string): GenerateConfigFile;

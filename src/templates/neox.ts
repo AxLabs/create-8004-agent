@@ -22,6 +22,7 @@ import {
     NEOX_T4_RPC_URL,
     isNeoxChain,
 } from "../neox/constants.js";
+import { buildNeoxRegistrationServices } from "../neox-registration-services.js";
 
 export {
     isNeoxChain,
@@ -163,9 +164,19 @@ ${storage}
 export function generateNeoxAgentConfig(answers: WizardAnswers): string {
     const image = answers.agentImage?.trim() || DEFAULT_FIXTURE_IMAGE_URI;
     const projectId = answers.agentName.toLowerCase().replace(/\s+/g, "-");
+    const services = buildNeoxRegistrationServices(answers);
+    const servicesBlock =
+        services.length > 0
+            ? `  services: ${JSON.stringify(services, null, 2).replace(/\n/g, "\n  ")},
+`
+            : "";
     return `import type { AgentProjectConfig } from "./neox/types.js";
 import { NEOX_T4_IDENTITY_REGISTRY } from "./neox/constants.js";
 
+/**
+ * Edit \`services[].endpoint\` (and optional OASF fields) before \`npm run register\`.
+ * These values are written into ERC-8004 registration-v1 metadata at setAgentURI time.
+ */
 export const AGENT_PROJECT_CONFIG: AgentProjectConfig = {
   name: ${JSON.stringify(answers.agentName)},
   description: ${JSON.stringify(answers.agentDescription)},
@@ -173,7 +184,7 @@ export const AGENT_PROJECT_CONFIG: AgentProjectConfig = {
   projectId: ${JSON.stringify(projectId)},
   registry: NEOX_T4_IDENTITY_REGISTRY,
   metadataStorage: ${JSON.stringify(answers.metadataStorage ?? "inline")},
-};
+${servicesBlock}};
 `;
 }
 
@@ -280,8 +291,16 @@ This:
 4. Persists transaction hashes immediately and resumes metadata publication if minting already succeeded.
 5. Refuses to mint a second identity once this project has completed.
 
-On-chain metadata uses \`services: []\`, \`active: false\`, \`x402Support: false\`, and \`supportedTrust: []\`.
-It does not advertise A2A/MCP endpoints or payment providers.
+Selected capabilities are declared under \`services\` in registration-v1 metadata (see \`src/agent-config.ts\`).
+Endpoints are self-declared — deploy or configure the real public URLs before registering.
+After Agentory indexes your agent, discovery examples:
+
+\`\`\`text
+GET https://agentory.xyz/api/agents?service=A2A
+GET https://agentory.xyz/api/agents?service=MCP
+\`\`\`
+
+Compact metadata also sets \`active: false\`, \`x402Support: false\`, and \`supportedTrust: []\`.
 
 ## 6. Verify
 
@@ -289,28 +308,38 @@ It does not advertise A2A/MCP endpoints or payment providers.
 npm run verify
 \`\`\`
 
-Reads \`ownerOf\`, \`tokenURI\`, and \`getAgentWallet\`, then writes secret-free \`registration-result.json\`.
-For HTTP(S) URIs it also retrieves and validates the metadata and exact Neo X registration reference.
+Reads \`ownerOf\`, \`tokenURI\`, and \`getAgentWallet\`, checks registration metadata (including \`services\`),
+then writes secret-free \`registration-result.json\`.
+For HTTP(S) URIs it retrieves the metadata before validating the exact Neo X registration reference and service declarations.
+
+## ERC-8004 service endpoints
+
+Edit \`src/agent-config.ts\` → \`services\` before \`npm run register\` or when resuming after a failed \`setAgentURI\`.
+${hasA2A ? `
+- **A2A**: must match your deployed agent card at \`/.well-known/agent-card.json\` (local dev: \`npm run start:a2a\` serves the generated card on port 3000).
+` : ""}${hasMCP ? `
+- **MCP**: the generated server uses stdio (\`npm run start:mcp\`). Advertise only an HTTP(S) URL you actually expose (gateway, sidecar, or host).
+` : ""}
 
 ## Transaction links
 
 Explorer transactions: \`${NEOX_T4_EXPLORER_URL}/tx/<hash>\`
 ${hasA2A ? `
-## Optional local A2A server
-
-A2A is generated for local development only and is not advertised in on-chain metadata.
+## Local A2A server
 
 \`\`\`bash
 npm run start:a2a
 \`\`\`
-` : ""}${hasMCP ? `
-## Optional local MCP server
 
-MCP is generated for local development only and is not advertised in on-chain metadata.
+Serves \`.well-known/agent-card.json\` on \`http://localhost:3000\`. Point the A2A service endpoint in \`agent-config.ts\` at your public URL before registration.
+` : ""}${hasMCP ? `
+## Local MCP server (stdio)
 
 \`\`\`bash
 npm run start:mcp
 \`\`\`
+
+For ERC-8004 discovery, configure the MCP service endpoint in \`agent-config.ts\` to a reachable HTTP(S) URL when you add a gateway.
 ` : ""}
 ## Resources
 

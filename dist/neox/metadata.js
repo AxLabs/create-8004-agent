@@ -1,4 +1,5 @@
 import { agentRegistryCaip, NEOX_T4_CHAIN_ID, REGISTRATION_V1_TYPE } from "./constants.js";
+import { normalizeAgentServices } from "./services.js";
 const DATA_JSON_PREFIX = "data:application/json;base64,";
 export function agentIdToDecimalString(agentId) {
     return agentId.toString(10);
@@ -29,12 +30,13 @@ export function agentIdForMetadataJson(agentId) {
     return agentId.toString(10);
 }
 export function buildRegistrationMetadata(config, agentId, registry, chainId = NEOX_T4_CHAIN_ID) {
+    const services = normalizeAgentServices(config.services ?? []);
     return {
         type: REGISTRATION_V1_TYPE,
         name: config.name,
         description: config.description,
         image: config.image,
-        services: [],
+        services,
         active: false,
         x402Support: false,
         supportedTrust: [],

@@ -17,6 +17,11 @@ export interface GenerateConfigFile {
     generatedPrivateKey?: string;
     skipInstall?: boolean;
     metadataStorage?: "inline" | "neofs";
+    a2aEndpoint?: string;
+    mcpEndpoint?: string;
+    oasfEndpoint?: string;
+    skills?: string[];
+    domains?: string[];
 }
 
 export function wizardAnswersFromConfig(raw: GenerateConfigFile): WizardAnswers {
@@ -38,6 +43,11 @@ export function wizardAnswersFromConfig(raw: GenerateConfigFile): WizardAnswers 
         agentWallet: raw.agentWallet ?? "",
         generatedPrivateKey: raw.generatedPrivateKey,
         metadataStorage: raw.metadataStorage ?? "inline",
+        a2aEndpoint: raw.a2aEndpoint,
+        mcpEndpoint: raw.mcpEndpoint,
+        oasfEndpoint: raw.oasfEndpoint,
+        skills: raw.skills,
+        domains: raw.domains,
     };
 }
 

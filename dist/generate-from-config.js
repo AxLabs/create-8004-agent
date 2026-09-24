@@ -21,6 +21,11 @@ export function wizardAnswersFromConfig(raw) {
         agentWallet: raw.agentWallet ?? "",
         generatedPrivateKey: raw.generatedPrivateKey,
         metadataStorage: raw.metadataStorage ?? "inline",
+        a2aEndpoint: raw.a2aEndpoint,
+        mcpEndpoint: raw.mcpEndpoint,
+        oasfEndpoint: raw.oasfEndpoint,
+        skills: raw.skills,
+        domains: raw.domains,
     };
 }
 export function readGenerateConfigFile(configPath) {

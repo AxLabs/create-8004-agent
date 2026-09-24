@@ -8,6 +8,8 @@ export {
     parseAgentId,
     registrationRefMatches,
 } from "./metadata.js";
+export { normalizeAgentServices } from "./services.js";
+export type { AgentService } from "./types.js";
 export { runPreflight, assertChainId, readRegistryIdentity } from "./preflight.js";
 export { registerOrResume, reconcilePending } from "./register.js";
 export { verifyOnChain } from "./verify.js";
