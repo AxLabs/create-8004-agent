@@ -4,9 +4,9 @@ export * from "./types.js";
 export * from "./inline.js";
 export * from "./neofs.js";
 export function metadataBackend(config) {
-    const backend = process.env.METADATA_STORAGE || config.metadataStorage || "inline";
+    const backend = config.metadataStorage || "inline";
     if (backend !== "inline" && backend !== "neofs") {
-        throw new Error(`Unsupported METADATA_STORAGE "${backend}". Use inline or neofs.`);
+        throw new Error(`Unsupported metadataStorage "${backend}". Use inline or neofs.`);
     }
     return backend;
 }

@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import type { Address } from "viem";
 import { generateProject } from "../src/generator.js";
 import { buildNeoxRegistrationServices } from "../src/neox-registration-services.js";
 import {
@@ -15,11 +16,14 @@ import {
     registrationRefMatches,
 } from "../src/neox/metadata.js";
 import { NEOX_T4_IDENTITY_REGISTRY } from "../src/neox/constants.js";
-import type { AgentProjectConfig } from "../src/neox/types.js";
+import { emptyState } from "../src/neox/state.js";
+import type { AgentProjectConfig, RegistrationState } from "../src/neox/types.js";
+import { verifyOnChain } from "../src/neox/verify.js";
 import type { WizardAnswers } from "../src/wizard.js";
 import { generateNeoxAgentConfig } from "../src/templates/neox.js";
 
 const REGISTRY = NEOX_T4_IDENTITY_REGISTRY;
+const OWNER = "0x1111111111111111111111111111111111111111" as Address;
 
 function baseAnswers(overrides: Partial<WizardAnswers> = {}): WizardAnswers {
     return {
@@ -42,6 +46,38 @@ const BASE_CONFIG: AgentProjectConfig = {
     image: "https://example.com/a.png",
     projectId: "service-test-agent",
 };
+
+async function verifyServicesFromAnswers(answers: WizardAnswers) {
+    const config: AgentProjectConfig = {
+        ...BASE_CONFIG,
+        services: buildNeoxRegistrationServices(answers),
+    };
+    const metadata = buildRegistrationMetadata(config, 42n, REGISTRY);
+    const uri = encodeMetadataDataUri(metadata);
+    const state: RegistrationState = {
+        ...emptyState(config.projectId),
+        stage: "uri-set",
+        agentId: "42",
+        owner: OWNER,
+        agentURI: uri,
+        metadata,
+        metadataStorage: { backend: "inline", uri },
+    };
+    const client = {
+        readContract: vi.fn().mockImplementation(({ functionName }: { functionName: string }) => {
+            if (functionName === "ownerOf" || functionName === "getAgentWallet") return OWNER;
+            if (functionName === "tokenURI") return uri;
+            throw new Error(`unexpected ${functionName}`);
+        }),
+    };
+    return verifyOnChain({
+        client: client as never,
+        registry: REGISTRY,
+        state,
+        config,
+        expectedOwner: OWNER,
+    });
+}
 
 describe("Neo X registration services model", () => {
     it("normalizes zero services", () => {
@@ -287,5 +323,20 @@ describe("resumable registration metadata", () => {
         const second = buildRegistrationMetadata(config, 42n, REGISTRY);
         expect(second).toEqual(first);
         expect(first.services).toEqual([]);
+    });
+
+    it("verifies stdio-only MCP without expecting a public service entry", async () => {
+        const result = await verifyServicesFromAnswers(baseAnswers({ features: ["mcp"] }));
+        expect(result.expectedServices).toEqual([]);
+        expect(result.metadataMatches).toBe(true);
+    });
+
+    it("verifies taxonomy-only OASF without expecting a public service entry", async () => {
+        const result = await verifyServicesFromAnswers(baseAnswers({
+            skills: ["technology/data_science/data_engineering"],
+            domains: ["finance_and_business/investment_services"],
+        }));
+        expect(result.expectedServices).toEqual([]);
+        expect(result.metadataMatches).toBe(true);
     });
 });

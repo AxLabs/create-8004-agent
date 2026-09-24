@@ -5,6 +5,7 @@ export declare function emptyState(projectId: string, registry?: `0x${string}`):
 export declare function loadState(projectDir: string, projectId: string, registry: Address): RegistrationState;
 export declare function saveState(projectDir: string, state: RegistrationState): void;
 export declare function persistPendingTx(projectDir: string, state: RegistrationState, kind: "register" | "setAgentURI", hash: Hex): RegistrationState;
+export declare function persistRevertedPending(projectDir: string, state: RegistrationState): RegistrationState;
 export declare function persistMinted(projectDir: string, state: RegistrationState, args: {
     agentId: string;
     owner: Address;

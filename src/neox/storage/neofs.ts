@@ -16,7 +16,7 @@ interface NeofsUploadResponse {
 
 function requiredUrl(value: string, name: string): string {
     const trimmed = value.trim().replace(/\/$/, "");
-    if (!trimmed) throw new Error(`${name} is required when METADATA_STORAGE=neofs`);
+    if (!trimmed) throw new Error(`${name} is required when metadataStorage is "neofs"`);
     let url: URL;
     try {
         url = new URL(trimmed);
@@ -37,7 +37,7 @@ export function validateNeofsStorageConfig(config: NeofsStorageConfig): NeofsSto
     }
     const containerId = config.containerId.trim();
     if (!containerId) {
-        throw new Error("NEOFS_CONTAINER_ID is required when METADATA_STORAGE=neofs");
+        throw new Error("NEOFS_CONTAINER_ID is required when metadataStorage is \"neofs\"");
     }
     return { ...config, restGateway, publicGateway, containerId };
 }

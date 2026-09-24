@@ -66,6 +66,21 @@ export function persistPendingTx(
     return next;
 }
 
+export function persistRevertedPending(
+    projectDir: string,
+    state: RegistrationState
+): RegistrationState {
+    if (!state.pendingTxHash || !state.pendingKind) return state;
+    const next: RegistrationState = {
+        ...state,
+        stage: state.pendingKind === "register" ? "not-started" : "minted",
+        pendingTxHash: undefined,
+        pendingKind: undefined,
+    };
+    saveState(projectDir, next);
+    return next;
+}
+
 export function persistMinted(
     projectDir: string,
     state: RegistrationState,

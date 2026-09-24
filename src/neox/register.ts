@@ -16,6 +16,7 @@ import {
     persistMinted,
     persistMetadataPublished,
     persistPendingTx,
+    persistRevertedPending,
     persistUriSet,
 } from "./state.js";
 import type {
@@ -98,7 +99,7 @@ export async function reconcilePending(
     if (!receipt) {
         const tx = await deps.publicClient.getTransaction({ hash }).catch(() => null);
         if (tx) {
-            receipt = await waitForReceipt(deps.publicClient, hash);
+            receipt = await deps.publicClient.waitForTransactionReceipt({ hash });
         } else {
             throw new Error(
                 `Pending ${state.pendingKind} transaction ${hash} was not found. Inspect the hash on the explorer before retrying.`
@@ -107,9 +108,8 @@ export async function reconcilePending(
     }
 
     if (receipt.status === "reverted") {
-        throw new Error(
-            `Pending ${state.pendingKind} transaction ${hash} reverted. Resolve it before retrying.`
-        );
+        console.log(`  Pending ${state.pendingKind} transaction ${hash} reverted; retrying safely.`);
+        return persistRevertedPending(deps.projectDir, state);
     }
 
     if (state.pendingKind === "register") {

@@ -2,7 +2,7 @@ import { metadataEquals } from "../metadata.js";
 function requiredUrl(value, name) {
     const trimmed = value.trim().replace(/\/$/, "");
     if (!trimmed)
-        throw new Error(`${name} is required when METADATA_STORAGE=neofs`);
+        throw new Error(`${name} is required when metadataStorage is "neofs"`);
     let url;
     try {
         url = new URL(trimmed);
@@ -23,7 +23,7 @@ export function validateNeofsStorageConfig(config) {
     }
     const containerId = config.containerId.trim();
     if (!containerId) {
-        throw new Error("NEOFS_CONTAINER_ID is required when METADATA_STORAGE=neofs");
+        throw new Error("NEOFS_CONTAINER_ID is required when metadataStorage is \"neofs\"");
     }
     return { ...config, restGateway, publicGateway, containerId };
 }

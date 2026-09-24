@@ -10,13 +10,17 @@ import {
     decodeMetadataDataUri,
     encodeMetadataDataUri,
 } from "../src/neox/metadata.js";
-import { registerOrResume } from "../src/neox/register.js";
+import { reconcilePending, registerOrResume } from "../src/neox/register.js";
 import { buildSecretFreeResult } from "../src/neox/result.js";
-import { emptyState } from "../src/neox/state.js";
+import { emptyState, saveState } from "../src/neox/state.js";
 import {
     NeofsMetadataStorage,
     validateNeofsStorageConfig,
 } from "../src/neox/storage/neofs.js";
+import {
+    createMetadataStorage,
+    metadataBackend,
+} from "../src/neox/storage/index.js";
 import type { MetadataStorage } from "../src/neox/storage/types.js";
 import type { AgentProjectConfig, RegistrationState } from "../src/neox/types.js";
 import { verifyOnChain } from "../src/neox/verify.js";
@@ -161,6 +165,41 @@ function uriUpdatedReceipt(uri: string) {
             blockNumber: 2n,
             transactionHash: `0x${"2".repeat(64)}` as Hex,
             blockHash: `0x${"3".repeat(64)}` as Hex,
+            logIndex: 0,
+            transactionIndex: 0,
+            removed: false,
+        }],
+    };
+}
+
+function revertedReceipt(hash = `0x${"1".repeat(64)}` as Hex) {
+    return {
+        status: "reverted",
+        transactionHash: hash,
+        blockNumber: 2n,
+        blockHash: `0x${"3".repeat(64)}` as Hex,
+        logs: [],
+    };
+}
+
+function registeredReceipt(agentId: bigint) {
+    const hash = `0x${"4".repeat(64)}` as Hex;
+    return {
+        status: "success",
+        transactionHash: hash,
+        blockNumber: 1n,
+        blockHash: `0x${"5".repeat(64)}` as Hex,
+        logs: [{
+            address: REGISTRY,
+            topics: encodeEventTopics({
+                abi: IDENTITY_REGISTRY_ABI,
+                eventName: "Registered",
+                args: { agentId, owner: OWNER },
+            }),
+            data: encodeAbiParameters([{ type: "string" }], [""]),
+            blockNumber: 1n,
+            transactionHash: hash,
+            blockHash: `0x${"5".repeat(64)}` as Hex,
             logIndex: 0,
             transactionIndex: 0,
             removed: false,
@@ -389,6 +428,47 @@ describe("registration publication resume", () => {
         expect(wallet.writeContract).not.toHaveBeenCalled();
     });
 
+    it("uses inline after the documented metadataStorage config change", async () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "documented-inline-fallback-"));
+        const inlineConfig: AgentProjectConfig = {
+            ...CONFIG,
+            metadataStorage: "inline",
+        };
+        expect(metadataBackend(inlineConfig)).toBe("inline");
+        expect(createMetadataStorage(inlineConfig).backend).toBe("inline");
+        const metadata = buildRegistrationMetadata(inlineConfig, 7n, REGISTRY);
+        const uri = encodeMetadataDataUri(metadata);
+        const minted: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "minted",
+            agentId: "7",
+            owner: OWNER,
+        };
+        const client = publicClient(uri);
+        const wallet = {
+            writeContract: vi.fn().mockResolvedValue(`0x${"2".repeat(64)}` as Hex),
+            account: undefined,
+            chain: undefined,
+        };
+
+        const completed = await registerOrResume({
+            publicClient: client as never,
+            walletClient: wallet as never,
+            signer: OWNER,
+            registry: REGISTRY,
+            projectDir,
+            config: inlineConfig,
+        }, minted);
+
+        expect(wallet.writeContract).toHaveBeenCalledWith(
+            expect.objectContaining({ args: [7n, uri] })
+        );
+        expect(completed.metadataStorage).toEqual({
+            backend: "inline",
+            uri,
+        });
+    });
+
     it("replaces a stale inline publication when services change", async () => {
         const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "inline-services-resume-"));
         const configB: AgentProjectConfig = {
@@ -444,6 +524,261 @@ describe("registration publication resume", () => {
         });
         expect(decodeMetadataDataUri(completed.agentURI!)).toEqual(metadataB);
         expect(decodeMetadataDataUri(completed.agentURI!).services).toEqual(configB.services);
+    });
+
+    it("clears a reverted pending register and permits a safe mint retry", async () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "pending-register-reverted-"));
+        const failedHash = `0x${"1".repeat(64)}` as Hex;
+        const pending: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "register-broadcast",
+            registerTxHash: failedHash,
+            pendingKind: "register",
+            pendingTxHash: failedHash,
+        };
+        saveState(projectDir, pending);
+        const recovered = await reconcilePending({
+            publicClient: {
+                getTransactionReceipt: vi.fn().mockResolvedValue(revertedReceipt(failedHash)),
+            } as never,
+            walletClient: {} as never,
+            signer: OWNER,
+            registry: REGISTRY,
+            projectDir,
+            config: CONFIG,
+        }, pending);
+
+        expect(recovered.stage).toBe("not-started");
+        expect(recovered.agentId).toBeUndefined();
+        expect(recovered.pendingKind).toBeUndefined();
+        expect(recovered.pendingTxHash).toBeUndefined();
+        const recoveredOnDisk = JSON.parse(
+            fs.readFileSync(path.join(projectDir, ".registration-state.json"), "utf8")
+        ) as RegistrationState;
+        expect(recoveredOnDisk.pendingTxHash).toBeUndefined();
+
+        const uri = "https://public.example/v1/objects/container/by_id/object-after-register";
+        const client = {
+            ...publicClient(uri),
+            waitForTransactionReceipt: vi.fn()
+                .mockResolvedValueOnce(registeredReceipt(7n))
+                .mockResolvedValueOnce(uriUpdatedReceipt(uri)),
+        };
+        const wallet = {
+            writeContract: vi.fn()
+                .mockResolvedValueOnce(`0x${"4".repeat(64)}` as Hex)
+                .mockResolvedValueOnce(`0x${"2".repeat(64)}` as Hex),
+            account: undefined,
+            chain: undefined,
+        };
+        const storage: MetadataStorage = {
+            backend: "neofs",
+            publish: vi.fn().mockResolvedValue({
+                backend: "neofs",
+                uri,
+                containerId: "container",
+                objectId: "object-after-register",
+            }),
+        };
+
+        const completed = await registerOrResume({
+            publicClient: client as never,
+            walletClient: wallet as never,
+            signer: OWNER,
+            registry: REGISTRY,
+            projectDir,
+            config: CONFIG,
+            storage,
+        }, recovered);
+
+        expect(wallet.writeContract).toHaveBeenNthCalledWith(
+            1,
+            expect.objectContaining({ functionName: "register", args: [] })
+        );
+        expect(completed.agentId).toBe("7");
+        expect(completed.stage).toBe("uri-set");
+    });
+
+    it("clears a reverted pending setAgentURI and retries without reminting", async () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "pending-uri-reverted-"));
+        const uri = "https://public.example/v1/objects/container/by_id/object-a";
+        const metadata = buildRegistrationMetadata(CONFIG, 7n, REGISTRY);
+        const failedHash = `0x${"1".repeat(64)}` as Hex;
+        const pending: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "set-uri-broadcast",
+            agentId: "7",
+            owner: OWNER,
+            agentURI: uri,
+            metadata,
+            metadataStorage: {
+                backend: "neofs",
+                uri,
+                containerId: "container",
+                objectId: "object-a",
+            },
+            setUriTxHash: failedHash,
+            pendingKind: "setAgentURI",
+            pendingTxHash: failedHash,
+        };
+        const storage: MetadataStorage = {
+            backend: "neofs",
+            publish: vi.fn(),
+        };
+        const client = {
+            ...publicClient(uri),
+            getTransactionReceipt: vi.fn().mockResolvedValue(revertedReceipt(failedHash)),
+        };
+        const wallet = {
+            writeContract: vi.fn().mockResolvedValue(`0x${"2".repeat(64)}` as Hex),
+            account: undefined,
+            chain: undefined,
+        };
+
+        const completed = await registerOrResume({
+            publicClient: client as never,
+            walletClient: wallet as never,
+            signer: OWNER,
+            registry: REGISTRY,
+            projectDir,
+            config: CONFIG,
+            storage,
+        }, pending);
+
+        expect(storage.publish).not.toHaveBeenCalled();
+        expect(wallet.writeContract).toHaveBeenCalledTimes(1);
+        expect(wallet.writeContract).toHaveBeenCalledWith(
+            expect.objectContaining({
+                functionName: "setAgentURI",
+                args: [7n, uri],
+            })
+        );
+        expect(completed.agentId).toBe("7");
+        expect(completed.pendingTxHash).toBeUndefined();
+    });
+
+    it("reapplies freshness after a stale pending setAgentURI reverts", async () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "pending-uri-reverted-stale-"));
+        const configB: AgentProjectConfig = {
+            ...CONFIG,
+            services: CONFIG.services?.map((service) =>
+                service.name === "A2A"
+                    ? { ...service, endpoint: "https://b.example/.well-known/agent-card.json" }
+                    : service
+            ),
+        };
+        const metadataA = buildRegistrationMetadata(CONFIG, 7n, REGISTRY);
+        const metadataB = buildRegistrationMetadata(configB, 7n, REGISTRY);
+        const uriA = "https://public.example/v1/objects/container/by_id/object-a";
+        const uriB = "https://public.example/v1/objects/container/by_id/object-b";
+        const failedHash = `0x${"1".repeat(64)}` as Hex;
+        const pending: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "set-uri-broadcast",
+            agentId: "7",
+            owner: OWNER,
+            agentURI: uriA,
+            metadata: metadataA,
+            metadataStorage: {
+                backend: "neofs",
+                uri: uriA,
+                containerId: "container",
+                objectId: "object-a",
+            },
+            pendingKind: "setAgentURI",
+            pendingTxHash: failedHash,
+        };
+        const storage: MetadataStorage = {
+            backend: "neofs",
+            publish: vi.fn().mockResolvedValue({
+                backend: "neofs",
+                uri: uriB,
+                containerId: "container",
+                objectId: "object-b",
+            }),
+        };
+        const client = {
+            ...publicClient(uriB),
+            getTransactionReceipt: vi.fn().mockResolvedValue(revertedReceipt(failedHash)),
+        };
+        const wallet = {
+            writeContract: vi.fn().mockResolvedValue(`0x${"2".repeat(64)}` as Hex),
+            account: undefined,
+            chain: undefined,
+        };
+
+        const completed = await registerOrResume({
+            publicClient: client as never,
+            walletClient: wallet as never,
+            signer: OWNER,
+            registry: REGISTRY,
+            projectDir,
+            config: configB,
+            storage,
+        }, pending);
+
+        expect(storage.publish).toHaveBeenCalledWith(
+            expect.objectContaining({ metadata: metadataB })
+        );
+        expect(wallet.writeContract).toHaveBeenCalledTimes(1);
+        expect(wallet.writeContract).toHaveBeenCalledWith(
+            expect.objectContaining({
+                functionName: "setAgentURI",
+                args: [7n, uriB],
+            })
+        );
+        expect(completed.metadata).toEqual(metadataB);
+        expect(completed.agentURI).toBe(uriB);
+    });
+
+    it("preserves an unknown pending hash and sends no replacement transaction", async () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "pending-uri-unknown-"));
+        const uri = "https://public.example/v1/objects/container/by_id/object-a";
+        const metadata = buildRegistrationMetadata(CONFIG, 7n, REGISTRY);
+        const pendingHash = `0x${"1".repeat(64)}` as Hex;
+        const pending: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "set-uri-broadcast",
+            agentId: "7",
+            owner: OWNER,
+            agentURI: uri,
+            metadata,
+            metadataStorage: {
+                backend: "neofs",
+                uri,
+                containerId: "container",
+                objectId: "object-a",
+            },
+            pendingKind: "setAgentURI",
+            pendingTxHash: pendingHash,
+        };
+        saveState(projectDir, pending);
+        const storage: MetadataStorage = {
+            backend: "neofs",
+            publish: vi.fn(),
+        };
+        const wallet = { writeContract: vi.fn() };
+
+        await expect(registerOrResume({
+            publicClient: {
+                getTransactionReceipt: vi.fn().mockRejectedValue(new Error("not found")),
+                getTransaction: vi.fn().mockResolvedValue(null),
+            } as never,
+            walletClient: wallet as never,
+            signer: OWNER,
+            registry: REGISTRY,
+            projectDir,
+            config: CONFIG,
+            storage,
+        }, pending)).rejects.toThrow(/was not found.*explorer/i);
+
+        const saved = JSON.parse(
+            fs.readFileSync(path.join(projectDir, ".registration-state.json"), "utf8")
+        ) as RegistrationState;
+        expect(saved.pendingKind).toBe("setAgentURI");
+        expect(saved.pendingTxHash).toBe(pendingHash);
+        expect(storage.publish).not.toHaveBeenCalled();
+        expect(wallet.writeContract).not.toHaveBeenCalled();
     });
 
     it("completes a confirmed pending setAgentURI when metadata is unchanged", async () => {

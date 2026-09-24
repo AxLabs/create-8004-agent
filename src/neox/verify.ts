@@ -1,12 +1,13 @@
 import { getAddress, type Address, type PublicClient } from "viem";
 import { IDENTITY_REGISTRY_ABI } from "./abi.js";
 import {
+    buildRegistrationMetadata,
     decodeMetadataDataUri,
     metadataEquals,
     parseAgentId,
     registrationRefMatches,
 } from "./metadata.js";
-import { normalizeAgentServices, servicesMetadataEquals } from "./services.js";
+import { servicesMetadataEquals } from "./services.js";
 import type { AgentProjectConfig, RegistrationState, VerificationResult } from "./types.js";
 import { readHttpMetadata } from "./storage/neofs.js";
 import type { FetchLike } from "./storage/types.js";
@@ -52,10 +53,15 @@ export async function verifyOnChain(args: {
     const decodedMetadata = tokenURI.startsWith("data:")
         ? decodeMetadataDataUri(tokenURI)
         : await readHttpMetadata(tokenURI, args.fetchImpl);
-    const expected = args.state.metadata;
-    const expectedServices = normalizeAgentServices(args.config.services ?? []);
+    const expected = buildRegistrationMetadata(
+        args.config,
+        agentId,
+        args.registry,
+        args.state.chainId
+    );
+    const expectedServices = expected.services;
     const servicesMatch = servicesMetadataEquals(decodedMetadata.services, expectedServices);
-    const metadataMatches = expected ? metadataEquals(decodedMetadata, expected) : true;
+    const metadataMatches = metadataEquals(decodedMetadata, expected);
     const registrationRefMatchesResult = registrationRefMatches(
         decodedMetadata,
         agentId,
@@ -63,7 +69,7 @@ export async function verifyOnChain(args: {
     );
 
     if (!metadataMatches) {
-        throw new Error("On-chain tokenURI metadata does not match the intended registration file");
+        throw new Error("On-chain tokenURI metadata does not match current canonical project metadata");
     }
     if (!servicesMatch) {
         throw new Error("On-chain metadata services do not match src/agent-config.ts declarations");

@@ -4,7 +4,7 @@ import { decodeRegisteredFromReceipt, decodeURIUpdatedFromReceipt, hasAgentId } 
 import { getNeoxFees } from "./fees.js";
 import { buildRegistrationMetadata, decodeMetadataDataUri, metadataEquals, parseAgentId, } from "./metadata.js";
 import { formatPreflight, runPreflight } from "./preflight.js";
-import { hasMinted, isComplete, persistMinted, persistMetadataPublished, persistPendingTx, persistUriSet, } from "./state.js";
+import { hasMinted, isComplete, persistMinted, persistMetadataPublished, persistPendingTx, persistRevertedPending, persistUriSet, } from "./state.js";
 import { InlineMetadataStorage } from "./storage/inline.js";
 export function canReuseMetadataPublication(state, metadata) {
     if (!state.metadata ||
@@ -51,14 +51,15 @@ export async function reconcilePending(deps, state) {
     if (!receipt) {
         const tx = await deps.publicClient.getTransaction({ hash }).catch(() => null);
         if (tx) {
-            receipt = await waitForReceipt(deps.publicClient, hash);
+            receipt = await deps.publicClient.waitForTransactionReceipt({ hash });
         }
         else {
             throw new Error(`Pending ${state.pendingKind} transaction ${hash} was not found. Inspect the hash on the explorer before retrying.`);
         }
     }
     if (receipt.status === "reverted") {
-        throw new Error(`Pending ${state.pendingKind} transaction ${hash} reverted. Resolve it before retrying.`);
+        console.log(`  Pending ${state.pendingKind} transaction ${hash} reverted; retrying safely.`);
+        return persistRevertedPending(deps.projectDir, state);
     }
     if (state.pendingKind === "register") {
         const registered = decodeRegisteredFromReceipt(receipt, deps.registry);

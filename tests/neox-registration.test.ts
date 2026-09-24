@@ -231,6 +231,102 @@ describe("metadata encoding and readback", () => {
         expect(result.metadataMatches).toBe(true);
         expect(result.registrationRefMatches).toBe(true);
     });
+
+    it.each([
+        ["name", { name: "Changed name" }],
+        ["description", { description: "Changed description" }],
+        ["image", { image: "https://example.com/changed.png" }],
+    ])("rejects inline verification when current %s changes", async (_field, override) => {
+        const metadata = buildRegistrationMetadata(CONFIG, 0n, REGISTRY);
+        const uri = encodeMetadataDataUri(metadata);
+        const state: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "uri-set",
+            agentId: "0",
+            owner: OWNER,
+            agentURI: uri,
+            metadata,
+            metadataStorage: { backend: "inline", uri },
+        };
+        const client = {
+            readContract: vi.fn().mockImplementation(({ functionName }: { functionName: string }) => {
+                if (functionName === "ownerOf" || functionName === "getAgentWallet") return OWNER;
+                if (functionName === "tokenURI") return uri;
+                throw new Error(`unexpected ${functionName}`);
+            }),
+        };
+
+        await expect(verifyOnChain({
+            client: client as never,
+            registry: REGISTRY,
+            state,
+            config: { ...CONFIG, ...override },
+            expectedOwner: OWNER,
+        })).rejects.toThrow(/current canonical project metadata/);
+    });
+
+    it("rejects verification when currently advertised services change", async () => {
+        const metadata = buildRegistrationMetadata(CONFIG, 0n, REGISTRY);
+        const uri = encodeMetadataDataUri(metadata);
+        const state: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "uri-set",
+            agentId: "0",
+            owner: OWNER,
+            agentURI: uri,
+            metadata,
+            metadataStorage: { backend: "inline", uri },
+        };
+        const client = {
+            readContract: vi.fn().mockImplementation(({ functionName }: { functionName: string }) => {
+                if (functionName === "ownerOf" || functionName === "getAgentWallet") return OWNER;
+                if (functionName === "tokenURI") return uri;
+                throw new Error(`unexpected ${functionName}`);
+            }),
+        };
+
+        await expect(verifyOnChain({
+            client: client as never,
+            registry: REGISTRY,
+            state,
+            config: {
+                ...CONFIG,
+                services: [{
+                    name: "A2A",
+                    endpoint: "https://changed.example/.well-known/agent-card.json",
+                }],
+            },
+            expectedOwner: OWNER,
+        })).rejects.toThrow(/current canonical project metadata/);
+    });
+
+    it("does not let missing persisted metadata hide current config drift", async () => {
+        const metadata = buildRegistrationMetadata(CONFIG, 0n, REGISTRY);
+        const uri = encodeMetadataDataUri(metadata);
+        const state: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "uri-set",
+            agentId: "0",
+            owner: OWNER,
+            agentURI: uri,
+            metadataStorage: { backend: "inline", uri },
+        };
+        const client = {
+            readContract: vi.fn().mockImplementation(({ functionName }: { functionName: string }) => {
+                if (functionName === "ownerOf" || functionName === "getAgentWallet") return OWNER;
+                if (functionName === "tokenURI") return uri;
+                throw new Error(`unexpected ${functionName}`);
+            }),
+        };
+
+        await expect(verifyOnChain({
+            client: client as never,
+            registry: REGISTRY,
+            state,
+            config: { ...CONFIG, name: "Changed name" },
+            expectedOwner: OWNER,
+        })).rejects.toThrow(/current canonical project metadata/);
+    });
 });
 
 describe("preflight rejection", () => {

@@ -103,15 +103,12 @@ export function generateNeoxEnvExample(_answers, chain) {
     const storage = _answers.metadataStorage === "neofs"
         ? `
 # NeoFS publication. The bearer token is optional for public-write containers.
-METADATA_STORAGE=neofs
 NEOFS_REST_GATEWAY=
 NEOFS_CONTAINER_ID=
 NEOFS_PUBLIC_GATEWAY=
 NEOFS_BEARER_TOKEN=
 `
-        : `
-METADATA_STORAGE=inline
-`;
+        : "";
     return `# Secret-free example. Copy to .env locally; never commit keys.
 # Provide exactly one of:
 PRIVATE_KEY=
@@ -213,7 +210,6 @@ The register script derives the public address locally and never prints the key.
 ${neofs ? `This project publishes metadata to NeoFS. Configure the existing container and gateways in \`.env\`:
 
 \`\`\`env
-METADATA_STORAGE=neofs
 NEOFS_REST_GATEWAY=https://your-rest-gateway.example
 NEOFS_CONTAINER_ID=your-container-id
 NEOFS_PUBLIC_GATEWAY=https://your-public-gateway.example
@@ -221,6 +217,7 @@ NEOFS_BEARER_TOKEN= # optional for a public-write container
 \`\`\`
 
 The REST gateway controls uploads. The public gateway must serve unauthenticated HTTPS reads. Never commit the bearer token.
+The backend is selected by \`metadataStorage\` in \`src/agent-config.ts\`. To fall back before registration completes, change it from \`"neofs"\` to \`"inline"\`; NeoFS environment variables are then ignored.
 ` : `Metadata uses the inline data-URI backend, so no external storage configuration is required.
 `}
 

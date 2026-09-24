@@ -158,7 +158,7 @@ describe("Neo X T4 generator routing", () => {
         expect(envExample).not.toMatch(/PRIVATE_KEY=0x[0-9a-fA-F]{64}/);
         expect(envExample).not.toContain("PINATA");
         expect(envExample).not.toContain("OPENAI");
-        expect(envExample).toContain("METADATA_STORAGE=inline");
+        expect(envExample).not.toContain("METADATA_STORAGE=");
         expect(envExample).not.toContain("NEOFS_BEARER_TOKEN");
         expect(readme).toContain("GAS");
         expect(readme).toContain("https://xt4scan.ngd.network");
@@ -184,13 +184,14 @@ describe("Neo X T4 generator routing", () => {
         const envExample = await fs.readFile(path.join(projectDir, ".env.example"), "utf8");
         const config = await fs.readFile(path.join(projectDir, "src/agent-config.ts"), "utf8");
         const readme = await fs.readFile(path.join(projectDir, "README.md"), "utf8");
-        expect(envExample).toContain("METADATA_STORAGE=neofs");
+        expect(envExample).not.toContain("METADATA_STORAGE=");
         expect(envExample).toContain("NEOFS_REST_GATEWAY=");
         expect(envExample).toContain("NEOFS_CONTAINER_ID=");
         expect(envExample).toContain("NEOFS_PUBLIC_GATEWAY=");
         expect(envExample).toContain("NEOFS_BEARER_TOKEN=");
         expect(config).toContain('metadataStorage: "neofs"');
         expect(readme).toContain("publishes metadata to NeoFS");
+        expect(readme).toContain('change it from `"neofs"` to `"inline"`');
         expect(readme).not.toMatch(/NEOFS_BEARER_TOKEN=[^\s#]+/);
     });
 

@@ -43,7 +43,6 @@ Copy `.env.example` to `.env`. The file is gitignored. Prefer a key file when pr
 PRIVATE_KEY_FILE=/absolute/path/to/gitignored-neox-t4-key
 # Or use PRIVATE_KEY=0x...
 
-METADATA_STORAGE=neofs
 NEOFS_REST_GATEWAY=https://your-rest-gateway.example
 NEOFS_CONTAINER_ID=your-existing-container-id
 NEOFS_PUBLIC_GATEWAY=https://your-public-gateway.example
@@ -108,10 +107,16 @@ If the AxLabs scanner/indexer supports generic HTTPS metadata URIs, optionally s
 
 ## Inline fallback
 
-If NeoFS is unavailable during the demo, change only this line in `.env`:
+The generated `src/agent-config.ts` is the source of truth for the metadata backend. If NeoFS is unavailable during the demo, change:
 
-```env
-METADATA_STORAGE=inline
+```ts
+metadataStorage: "neofs",
 ```
 
-For a project that has not yet published metadata, rerun `npm run preflight` and `npm run register`. The same mint/resume logic will publish a `data:application/json;base64,...` URI without NeoFS. Do not delete `.registration-state.json`; it is what prevents duplicate minting.
+to:
+
+```ts
+metadataStorage: "inline",
+```
+
+For a project that has not yet completed registration, rerun `npm run preflight` and `npm run register`. The same mint/resume logic will publish a `data:application/json;base64,...` URI without NeoFS. Existing NeoFS environment variables may remain in `.env`; they are ignored when `metadataStorage` is `"inline"`. Do not delete `.registration-state.json`; it is what prevents duplicate minting.
