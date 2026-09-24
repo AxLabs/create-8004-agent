@@ -8,7 +8,6 @@ export const REGISTRATION_SERVICES_MAX = 20;
 export const REGISTRATION_OASF_ITEMS_MAX = 50;
 
 const HTTP_URL_SCHEMES = new Set(["http:", "https:"]);
-const DEFAULT_OASF_ENDPOINT = "https://github.com/8004-org/oasf";
 
 function containsUnsafeMarkup(value: string): boolean {
     return /<\s*script/i.test(value) || /javascript:/i.test(value);
@@ -45,6 +44,18 @@ export function parseOasfTaxonomyInput(raw: string | undefined): string[] {
         }
     }
     return parts;
+}
+
+/** Blank input is valid (no public service advertisement). Non-blank uses full endpoint rules. */
+export function validateOptionalRegistrationServiceEndpoint(
+    serviceName: string,
+    endpoint: string
+): { ok: true } | { ok: false; message: string } {
+    const trimmed = endpoint.trim();
+    if (!trimmed) {
+        return { ok: true };
+    }
+    return validateRegistrationServiceEndpoint(serviceName, trimmed);
 }
 
 export function validateRegistrationServiceEndpoint(
@@ -187,14 +198,6 @@ export function normalizeAgentServices(services: readonly AgentService[] | undef
 
 export function defaultA2aAgentCardEndpoint(): string {
     return "https://YOUR_PUBLIC_HOST/.well-known/agent-card.json";
-}
-
-export function defaultMcpHttpEndpoint(): string {
-    return "https://YOUR_PUBLIC_HOST/mcp";
-}
-
-export function defaultOasfTaxonomyEndpoint(): string {
-    return DEFAULT_OASF_ENDPOINT;
 }
 
 export function servicesMetadataEquals(actual: AgentService[], expected: AgentService[]): boolean {
