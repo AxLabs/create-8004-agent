@@ -38,14 +38,14 @@ export async function runNeoxRegistrationCli(config, argv = process.argv.slice(2
         ? buildRegistrationMetadata(config, parseAgentId(state.agentId), registry)
         : undefined;
     const needsPublication = !isComplete(state) &&
-        (!intendedMetadata || !canReuseMetadataPublication(state, intendedMetadata));
+        (!intendedMetadata || !canReuseMetadataPublication(state, intendedMetadata, backend));
     // Preflight validates selected storage without uploading. Registration validates
     // before minting, while completed or matching resumable publications need no upload credentials.
     const storagePreflightUri = command === "preflight" || command === "dry-run" || (command === "register" && needsPublication)
         ? uriForStoragePreflight(config)
         : undefined;
     const uriForEstimate = hasMinted(state)
-        ? canReuseMetadataPublication(state, intendedMetadata)
+        ? canReuseMetadataPublication(state, intendedMetadata, backend)
             ? state.agentURI
             : storagePreflightUri ?? encodeMetadataDataUri(intendedMetadata)
         : undefined;

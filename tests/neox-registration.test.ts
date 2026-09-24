@@ -190,7 +190,8 @@ describe("metadata encoding and readback", () => {
             metadataStorage: { backend: "inline", uri },
         };
 
-        expect(canReuseMetadataPublication(state, metadata)).toBe(true);
+        expect(canReuseMetadataPublication(state, metadata, "inline")).toBe(true);
+        expect(canReuseMetadataPublication(state, metadata, "neofs")).toBe(false);
         expect(canReuseMetadataPublication({
             ...state,
             agentURI: "data:application/json;base64,%%%%",
@@ -198,7 +199,7 @@ describe("metadata encoding and readback", () => {
                 backend: "inline",
                 uri: "data:application/json;base64,%%%%",
             },
-        }, metadata)).toBe(false);
+        }, metadata, "inline")).toBe(false);
     });
 
     it("keeps inline registrations verifiable", async () => {

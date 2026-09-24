@@ -65,7 +65,7 @@ export async function runNeoxRegistrationCli(
         : undefined;
     const needsPublication =
         !isComplete(state) &&
-        (!intendedMetadata || !canReuseMetadataPublication(state, intendedMetadata));
+        (!intendedMetadata || !canReuseMetadataPublication(state, intendedMetadata, backend));
     // Preflight validates selected storage without uploading. Registration validates
     // before minting, while completed or matching resumable publications need no upload credentials.
     const storagePreflightUri =
@@ -74,7 +74,7 @@ export async function runNeoxRegistrationCli(
             : undefined;
 
     const uriForEstimate = hasMinted(state)
-        ? canReuseMetadataPublication(state, intendedMetadata!)
+        ? canReuseMetadataPublication(state, intendedMetadata!, backend)
             ? state.agentURI
             : storagePreflightUri ?? encodeMetadataDataUri(intendedMetadata!)
         : undefined;

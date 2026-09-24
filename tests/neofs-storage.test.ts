@@ -438,11 +438,20 @@ describe("registration publication resume", () => {
         expect(createMetadataStorage(inlineConfig).backend).toBe("inline");
         const metadata = buildRegistrationMetadata(inlineConfig, 7n, REGISTRY);
         const uri = encodeMetadataDataUri(metadata);
+        const oldUri = "https://public.example/v1/objects/container/by_id/object-neofs";
         const minted: RegistrationState = {
             ...emptyState(CONFIG.projectId),
             stage: "minted",
             agentId: "7",
             owner: OWNER,
+            agentURI: oldUri,
+            metadata,
+            metadataStorage: {
+                backend: "neofs",
+                uri: oldUri,
+                containerId: "container",
+                objectId: "object-neofs",
+            },
         };
         const client = publicClient(uri);
         const wallet = {
@@ -463,9 +472,84 @@ describe("registration publication resume", () => {
         expect(wallet.writeContract).toHaveBeenCalledWith(
             expect.objectContaining({ args: [7n, uri] })
         );
+        expect(client.simulateContract).toHaveBeenCalledWith(
+            expect.objectContaining({ args: [7n, uri] })
+        );
+        expect(client.estimateContractGas).toHaveBeenCalledWith(
+            expect.objectContaining({ args: [7n, uri] })
+        );
+        expect(completed.agentId).toBe("7");
+        expect(completed.agentURI).toBe(uri);
         expect(completed.metadataStorage).toEqual({
             backend: "inline",
             uri,
+        });
+    });
+
+    it("republishes inline metadata through NeoFS when the configured backend changes", async () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "inline-to-neofs-"));
+        const metadata = buildRegistrationMetadata(CONFIG, 7n, REGISTRY);
+        const oldUri = encodeMetadataDataUri(metadata);
+        const newUri = "https://public.example/v1/objects/container/by_id/object-neofs";
+        const minted: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "minted",
+            agentId: "7",
+            owner: OWNER,
+            agentURI: oldUri,
+            metadata,
+            metadataStorage: { backend: "inline", uri: oldUri },
+        };
+        const storage: MetadataStorage = {
+            backend: "neofs",
+            publish: vi.fn().mockResolvedValue({
+                backend: "neofs",
+                uri: newUri,
+                containerId: "container",
+                objectId: "object-neofs",
+            }),
+        };
+        const client = publicClient(newUri);
+        const wallet = {
+            writeContract: vi.fn().mockResolvedValue(`0x${"2".repeat(64)}` as Hex),
+            account: undefined,
+            chain: undefined,
+        };
+
+        const completed = await registerOrResume({
+            publicClient: client as never,
+            walletClient: wallet as never,
+            signer: OWNER,
+            registry: REGISTRY,
+            projectDir,
+            config: CONFIG,
+            storage,
+        }, minted);
+
+        expect(storage.publish).toHaveBeenCalledTimes(1);
+        expect(storage.publish).toHaveBeenCalledWith(
+            expect.objectContaining({ metadata, agentId: 7n })
+        );
+        expect(wallet.writeContract).toHaveBeenCalledTimes(1);
+        expect(wallet.writeContract).toHaveBeenCalledWith(
+            expect.objectContaining({
+                functionName: "setAgentURI",
+                args: [7n, newUri],
+            })
+        );
+        expect(client.simulateContract).toHaveBeenCalledWith(
+            expect.objectContaining({ args: [7n, newUri] })
+        );
+        expect(client.estimateContractGas).toHaveBeenCalledWith(
+            expect.objectContaining({ args: [7n, newUri] })
+        );
+        expect(completed.agentId).toBe("7");
+        expect(completed.agentURI).toBe(newUri);
+        expect(completed.metadataStorage).toEqual({
+            backend: "neofs",
+            uri: newUri,
+            containerId: "container",
+            objectId: "object-neofs",
         });
     });
 
