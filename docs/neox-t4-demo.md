@@ -76,7 +76,9 @@ npm run register
 
 The command mints the identity, uploads the exact registration metadata to NeoFS, reads it back from the public HTTPS URI, persists the secret-free publication record, and calls `setAgentURI`. Copy the printed transaction links and open them in the [Neo X T4 explorer](https://xt4scan.ngd.network).
 
-If the process stops after minting or after upload, run the same command again. `.registration-state.json` prevents a second mint and reuses a completed upload.
+If the process stops after minting or after upload, run the same command again. `.registration-state.json` keeps the existing `agentId`; registration does not mint a second identity.
+
+A saved metadata publication is reused only when its canonical metadata, URI, and storage backend still match the current configuration. If the metadata or `metadataStorage` changed before registration completed, the retry publishes again with the current configuration and the same `agentId`. A reverted transaction is recovered by that same retry. If a pending transaction hash cannot be found, registration stops and leaves the hash in place instead of broadcasting a replacement; inspect it on the explorer before continuing.
 
 ## 6. Show the public metadata
 
