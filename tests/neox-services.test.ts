@@ -3,7 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { generateProject } from "../src/generator.js";
 import { buildNeoxRegistrationServices } from "../src/neox-registration-services.js";
-import { normalizeAgentServices } from "../src/neox/services.js";
+import {
+    normalizeAgentServices,
+    validateOptionalRegistrationServiceEndpoint,
+    validateRegistrationServiceEndpoint,
+} from "../src/neox/services.js";
 import {
     buildRegistrationMetadata,
     decodeMetadataDataUri,
@@ -58,7 +62,7 @@ describe("Neo X registration services model", () => {
         ]);
     });
 
-    it("includes MCP only", () => {
+    it("includes MCP only when a public HTTP endpoint is configured", () => {
         const services = buildNeoxRegistrationServices(
             baseAnswers({
                 features: ["mcp"],
@@ -68,7 +72,12 @@ describe("Neo X registration services model", () => {
         expect(services).toEqual([{ name: "MCP", endpoint: "https://agent.example/mcp" }]);
     });
 
-    it("includes A2A and MCP together", () => {
+    it("omits MCP service metadata when MCP is selected without a public endpoint", () => {
+        const services = buildNeoxRegistrationServices(baseAnswers({ features: ["mcp"] }));
+        expect(services).toEqual([]);
+    });
+
+    it("includes A2A and MCP together when MCP endpoint is set", () => {
         const services = buildNeoxRegistrationServices(
             baseAnswers({
                 features: ["a2a", "mcp"],
@@ -80,22 +89,77 @@ describe("Neo X registration services model", () => {
         expect(services.map((s) => s.name).sort()).toEqual(["A2A", "MCP"]);
     });
 
-    it("includes OASF skills and domains", () => {
+    it("rejects invalid MCP public endpoints", () => {
+        const result = validateRegistrationServiceEndpoint("MCP", "ipfs://QmExample");
+        expect(result.ok).toBe(false);
+    });
+
+    it("accepts blank optional MCP endpoint", () => {
+        expect(validateOptionalRegistrationServiceEndpoint("MCP", "").ok).toBe(true);
+        expect(validateOptionalRegistrationServiceEndpoint("MCP", "   ").ok).toBe(true);
+    });
+
+    it("does not inject YOUR_PUBLIC_HOST MCP placeholder into metadata", () => {
+        const configSource = generateNeoxAgentConfig(baseAnswers({ features: ["mcp"] }));
+        expect(configSource).not.toContain("YOUR_PUBLIC_HOST");
+        expect(configSource).not.toContain('"name": "MCP"');
+    });
+
+    it("omits OASF service when skills/domains are set without an endpoint", () => {
         const services = buildNeoxRegistrationServices(
             baseAnswers({
                 skills: ["technology/data_science/data_engineering"],
                 domains: ["finance_and_business/investment_services"],
-                oasfEndpoint: "https://github.com/8004-org/oasf",
+            })
+        );
+        expect(services).toEqual([]);
+    });
+
+    it("includes OASF with explicit HTTPS endpoint", () => {
+        const services = buildNeoxRegistrationServices(
+            baseAnswers({
+                skills: ["technology/data_science/data_engineering"],
+                domains: ["finance_and_business/investment_services"],
+                oasfEndpoint: "https://agent.example/oasf",
             })
         );
         expect(services).toEqual([
             {
                 name: "OASF",
-                endpoint: "https://github.com/8004-org/oasf",
+                endpoint: "https://agent.example/oasf",
                 skills: ["technology/data_science/data_engineering"],
                 domains: ["finance_and_business/investment_services"],
             },
         ]);
+    });
+
+    it("includes OASF with explicit IPFS endpoint", () => {
+        const services = buildNeoxRegistrationServices(
+            baseAnswers({
+                skills: ["technology/data_science/data_engineering"],
+                oasfEndpoint: "ipfs://QmOasfResource",
+            })
+        );
+        expect(services).toEqual([
+            {
+                name: "OASF",
+                endpoint: "ipfs://QmOasfResource",
+                skills: ["technology/data_science/data_engineering"],
+            },
+        ]);
+    });
+
+    it("does not auto-use the OASF taxonomy GitHub repo as service endpoint", () => {
+        const services = buildNeoxRegistrationServices(
+            baseAnswers({
+                skills: ["technology/data_science/data_engineering"],
+            })
+        );
+        expect(services.some((s) => s.endpoint.includes("github.com/8004-org/oasf"))).toBe(false);
+    });
+
+    it("accepts blank optional OASF endpoint", () => {
+        expect(validateOptionalRegistrationServiceEndpoint("OASF", "").ok).toBe(true);
     });
 
     it("round-trips metadata with services and preserves registration ref", () => {
@@ -144,6 +208,30 @@ describe("Neo X generator service declarations", () => {
         expect(configSource).toContain(".well-known/agent-card.json");
     });
 
+    it("generates MCP server script without MCP service metadata when no public endpoint", async () => {
+        await fs.promises.rm(outputRoot, { recursive: true, force: true });
+        await generateProject(
+            baseAnswers({
+                projectDir: path.join(outputRoot, "mcp-stdio-only"),
+                features: ["mcp"],
+            })
+        );
+        const pkg = JSON.parse(
+            await fs.promises.readFile(path.join(outputRoot, "mcp-stdio-only", "package.json"), "utf8")
+        );
+        expect(pkg.scripts["start:mcp"]).toBeDefined();
+        const configSource = await fs.promises.readFile(
+            path.join(outputRoot, "mcp-stdio-only", "src", "agent-config.ts"),
+            "utf8"
+        );
+        expect(configSource).not.toContain('"name": "MCP"');
+        const mcpServer = await fs.promises.readFile(
+            path.join(outputRoot, "mcp-stdio-only", "src", "mcp-server.ts"),
+            "utf8"
+        );
+        expect(mcpServer).toContain("StdioServerTransport");
+    });
+
     it("writes README service discovery guidance", async () => {
         await fs.promises.rm(outputRoot, { recursive: true, force: true });
         await generateProject(
@@ -161,6 +249,23 @@ describe("Neo X generator service declarations", () => {
         expect(readme).toContain("service=A2A");
         expect(readme).not.toContain("not advertised in on-chain metadata");
     });
+
+    it("README distinguishes stdio MCP from ERC-8004 HTTP advertisement", async () => {
+        await fs.promises.rm(outputRoot, { recursive: true, force: true });
+        await generateProject(
+            baseAnswers({
+                projectDir: path.join(outputRoot, "mcp-readme"),
+                features: ["mcp"],
+            })
+        );
+        const readme = await fs.promises.readFile(
+            path.join(outputRoot, "mcp-readme", "README.md"),
+            "utf8"
+        );
+        expect(readme).toContain("stdio MCP server");
+        expect(readme).toContain("does not listen on HTTP");
+        expect(readme).toContain("does not serve the HTTP URL");
+    });
 });
 
 describe("resumable registration metadata", () => {
@@ -173,5 +278,14 @@ describe("resumable registration metadata", () => {
         const second = buildRegistrationMetadata(config, 0n, REGISTRY);
         expect(second).toEqual(first);
         expect(decodeMetadataDataUri(encodeMetadataDataUri(first)).services).toEqual(config.services);
+    });
+
+    it("rebuilds identical services when MCP is stdio-only (no public advertisement)", () => {
+        const built = buildNeoxRegistrationServices(baseAnswers({ features: ["mcp"] }));
+        const config: AgentProjectConfig = { ...BASE_CONFIG, services: built };
+        const first = buildRegistrationMetadata(config, 42n, REGISTRY);
+        const second = buildRegistrationMetadata(config, 42n, REGISTRY);
+        expect(second).toEqual(first);
+        expect(first.services).toEqual([]);
     });
 });

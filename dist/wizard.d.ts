@@ -17,9 +17,9 @@ export interface WizardAnswers {
     domains?: string[];
     /** Public agent-card URL for ERC-8004 A2A service metadata (Neo X). */
     a2aEndpoint?: string;
-    /** Public HTTP MCP endpoint for ERC-8004 MCP service metadata (Neo X). */
+    /** Optional public HTTP(S) MCP endpoint for ERC-8004 discovery (Neo X; stdio-only if omitted). */
     mcpEndpoint?: string;
-    /** OASF taxonomy reference endpoint (Neo X). */
+    /** Optional OASF service/resource endpoint for ERC-8004 metadata (Neo X). */
     oasfEndpoint?: string;
 }
 export { isSolanaChain } from "./config-solana.js";

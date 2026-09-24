@@ -7,7 +7,7 @@ import bs58 from "bs58";
 import { CHAINS, TRUST_MODELS } from "./config.js";
 import { isSolanaChain } from "./config-solana.js";
 import { isNeoxChain } from "./neox/constants.js";
-import { defaultA2aAgentCardEndpoint, defaultMcpHttpEndpoint, parseOasfTaxonomyInput, validateRegistrationServiceEndpoint, } from "./neox/services.js";
+import { defaultA2aAgentCardEndpoint, parseOasfTaxonomyInput, validateOptionalRegistrationServiceEndpoint, validateRegistrationServiceEndpoint, } from "./neox/services.js";
 function getAvailableDir(baseDir) {
     if (baseDir === ".")
         return baseDir;
@@ -185,11 +185,10 @@ export async function runWizard() {
         {
             type: "input",
             name: "mcpEndpoint",
-            message: "Public MCP HTTP endpoint (ERC-8004 metadata; stdio server needs a gateway):",
-            default: defaultMcpHttpEndpoint(),
+            message: "Public MCP HTTP endpoint for ERC-8004 discovery (optional; leave blank for stdio-only MCP):",
             when: (ans) => isNeoxChain(ans.chain ?? "") && (ans.features?.includes("mcp") ?? false),
             validate: (input) => {
-                const result = validateRegistrationServiceEndpoint("MCP", input);
+                const result = validateOptionalRegistrationServiceEndpoint("MCP", input);
                 return result.ok || result.message;
             },
         },
@@ -208,12 +207,11 @@ export async function runWizard() {
         {
             type: "input",
             name: "oasfEndpoint",
-            message: "OASF taxonomy reference URL:",
-            default: "https://github.com/8004-org/oasf",
+            message: "OASF service/resource endpoint for ERC-8004 metadata (optional):",
             when: (ans) => isNeoxChain(ans.chain ?? "") &&
                 Boolean(ans.oasfSkills?.trim() || ans.oasfDomains?.trim()),
             validate: (input) => {
-                const result = validateRegistrationServiceEndpoint("OASF", input);
+                const result = validateOptionalRegistrationServiceEndpoint("OASF", input);
                 return result.ok || result.message;
             },
         },
@@ -281,8 +279,8 @@ export async function runWizard() {
         // Default to false if A2A not selected (question was skipped)
         a2aStreaming: answers.a2aStreaming ?? false,
         a2aEndpoint: answers.a2aEndpoint,
-        mcpEndpoint: answers.mcpEndpoint,
-        oasfEndpoint: answers.oasfEndpoint,
+        mcpEndpoint: answers.mcpEndpoint?.trim() || undefined,
+        oasfEndpoint: answers.oasfEndpoint?.trim() || undefined,
         skills,
         domains,
     };
