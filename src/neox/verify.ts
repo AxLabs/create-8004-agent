@@ -6,6 +6,7 @@ import {
     parseAgentId,
     registrationRefMatches,
 } from "./metadata.js";
+import { normalizeAgentServices, servicesMetadataEquals } from "./services.js";
 import type { AgentProjectConfig, RegistrationState, VerificationResult } from "./types.js";
 
 export async function verifyOnChain(args: {
@@ -47,6 +48,8 @@ export async function verifyOnChain(args: {
 
     const decodedMetadata = decodeMetadataDataUri(tokenURI);
     const expected = args.state.metadata;
+    const expectedServices = normalizeAgentServices(args.config.services ?? []);
+    const servicesMatch = servicesMetadataEquals(decodedMetadata.services, expectedServices);
     const metadataMatches = expected ? metadataEquals(decodedMetadata, expected) : true;
     const registrationRefMatchesResult = registrationRefMatches(
         decodedMetadata,
@@ -56,6 +59,9 @@ export async function verifyOnChain(args: {
 
     if (!metadataMatches) {
         throw new Error("On-chain tokenURI metadata does not match the intended registration file");
+    }
+    if (!servicesMatch) {
+        throw new Error("On-chain metadata services do not match src/agent-config.ts declarations");
     }
     if (!registrationRefMatchesResult) {
         throw new Error("On-chain metadata is missing the exact eip155 registration reference");
@@ -72,5 +78,7 @@ export async function verifyOnChain(args: {
         decodedMetadata,
         metadataMatches,
         registrationRefMatches: registrationRefMatchesResult,
+        servicesMatch,
+        expectedServices,
     };
 }

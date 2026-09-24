@@ -6,7 +6,7 @@ export declare function parseAgentId(value: string | number | bigint): bigint;
  * Callers must keep bigint/decimal-string forms for on-chain and exported state.
  */
 export declare function agentIdForMetadataJson(agentId: bigint): number | string;
-export declare function buildRegistrationMetadata(config: Pick<AgentProjectConfig, "name" | "description" | "image">, agentId: bigint, registry: string, chainId?: number): AgentRegistrationMetadata;
+export declare function buildRegistrationMetadata(config: Pick<AgentProjectConfig, "name" | "description" | "image" | "services">, agentId: bigint, registry: string, chainId?: number): AgentRegistrationMetadata;
 export declare function encodeMetadataDataUri(metadata: AgentRegistrationMetadata): string;
 export declare function decodeMetadataDataUri(uri: string): AgentRegistrationMetadata;
 export declare function metadataEquals(actual: AgentRegistrationMetadata, expected: AgentRegistrationMetadata): boolean;

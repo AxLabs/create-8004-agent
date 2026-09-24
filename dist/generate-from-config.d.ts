@@ -13,6 +13,11 @@ export interface GenerateConfigFile {
     agentWallet?: string;
     generatedPrivateKey?: string;
     skipInstall?: boolean;
+    a2aEndpoint?: string;
+    mcpEndpoint?: string;
+    oasfEndpoint?: string;
+    skills?: string[];
+    domains?: string[];
 }
 export declare function wizardAnswersFromConfig(raw: GenerateConfigFile): WizardAnswers;
 export declare function readGenerateConfigFile(configPath: string): GenerateConfigFile;

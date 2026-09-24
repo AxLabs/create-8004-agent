@@ -35,6 +35,12 @@ const CONFIG: AgentProjectConfig = {
     description: "Fixture",
     image: "data:image/png;base64,aaa",
     projectId: "neox-scanner-test-01",
+    services: [
+        {
+            name: "A2A",
+            endpoint: "https://scanner.example/.well-known/agent-card.json",
+        },
+    ],
 };
 
 function padTopic(value: bigint | Address): Hex {
@@ -140,7 +146,7 @@ describe("metadata encoding and readback", () => {
     it("round-trips registration-v1 data URIs including agent ID 0", () => {
         const metadata = buildRegistrationMetadata(CONFIG, 0n, REGISTRY);
         expect(metadata.type).toContain("registration-v1");
-        expect(metadata.services).toEqual([]);
+        expect(metadata.services).toEqual(CONFIG.services);
         expect(metadata.active).toBe(false);
         expect(metadata.x402Support).toBe(false);
         expect(metadata.supportedTrust).toEqual([]);

@@ -2,6 +2,7 @@ export { isNeoxChain, NEOX_T4_CHAIN_KEY, NEOX_T4_CHAIN_ID, NEOX_T4_IDENTITY_REGI
 export { IDENTITY_REGISTRY_ABI, REGISTERED_SIGNATURE, URI_UPDATED_SIGNATURE } from "./abi.js";
 export { decodeRegisteredFromReceipt, decodeURIUpdatedFromReceipt, REGISTERED_TOPIC, URI_UPDATED_TOPIC } from "./events.js";
 export { buildRegistrationMetadata, decodeMetadataDataUri, encodeMetadataDataUri, parseAgentId, registrationRefMatches, } from "./metadata.js";
+export { normalizeAgentServices } from "./services.js";
 export { runPreflight, assertChainId, readRegistryIdentity } from "./preflight.js";
 export { registerOrResume, reconcilePending } from "./register.js";
 export { verifyOnChain } from "./verify.js";
