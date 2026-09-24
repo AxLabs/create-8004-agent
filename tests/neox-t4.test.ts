@@ -96,11 +96,16 @@ describe("Neo X T4 generator routing", () => {
         expect(copied).toContain("12227332");
     });
 
-    it("compiles the generated project", async () => {
-        const projectDir = path.join(OUTPUT_DIR, "identity-fixture");
-        await execFileAsync("npm", ["install", "--no-fund", "--no-audit"], {
-            cwd: projectDir,
-        });
-        await execFileAsync("npx", ["tsc", "--noEmit"], { cwd: projectDir });
-    }, 180000);
+    it(
+        "compiles the generated project",
+        async () => {
+            const projectDir = path.join(OUTPUT_DIR, "identity-fixture");
+            await execFileAsync("npm", ["install", "--no-fund", "--no-audit"], {
+                cwd: projectDir,
+                maxBuffer: 10 * 1024 * 1024,
+            });
+            await execFileAsync("npx", ["tsc", "--noEmit"], { cwd: projectDir });
+        },
+        300000,
+    );
 });
