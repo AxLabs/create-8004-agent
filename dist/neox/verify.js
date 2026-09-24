@@ -1,6 +1,7 @@
 import { getAddress } from "viem";
 import { IDENTITY_REGISTRY_ABI } from "./abi.js";
 import { decodeMetadataDataUri, metadataEquals, parseAgentId, registrationRefMatches, } from "./metadata.js";
+import { readHttpMetadata } from "./storage/neofs.js";
 export async function verifyOnChain(args) {
     if (args.state.agentId === undefined) {
         throw new Error("Cannot verify before minting an agentId");
@@ -29,7 +30,9 @@ export async function verifyOnChain(args) {
     if (getAddress(owner) !== getAddress(args.expectedOwner)) {
         throw new Error(`ownerOf(${args.state.agentId}) is ${owner}, expected ${args.expectedOwner}`);
     }
-    const decodedMetadata = decodeMetadataDataUri(tokenURI);
+    const decodedMetadata = tokenURI.startsWith("data:")
+        ? decodeMetadataDataUri(tokenURI)
+        : await readHttpMetadata(tokenURI, args.fetchImpl);
     const expected = args.state.metadata;
     const metadataMatches = expected ? metadataEquals(decodedMetadata, expected) : true;
     const registrationRefMatchesResult = registrationRefMatches(decodedMetadata, agentId, args.registry);
@@ -50,5 +53,9 @@ export async function verifyOnChain(args) {
         decodedMetadata,
         metadataMatches,
         registrationRefMatches: registrationRefMatchesResult,
+        metadataStorage: args.state.metadataStorage ?? {
+            backend: tokenURI.startsWith("data:") ? "inline" : "neofs",
+            uri: tokenURI,
+        },
     };
 }

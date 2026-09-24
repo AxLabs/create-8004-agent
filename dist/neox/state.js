@@ -77,6 +77,16 @@ export function persistUriSet(projectDir, state, args) {
     saveState(projectDir, next);
     return next;
 }
+export function persistMetadataPublished(projectDir, state, metadata, publication) {
+    const next = {
+        ...state,
+        metadata,
+        agentURI: publication.uri,
+        metadataStorage: publication,
+    };
+    saveState(projectDir, next);
+    return next;
+}
 export function persistVerified(projectDir, state, agentWallet) {
     const next = {
         ...state,

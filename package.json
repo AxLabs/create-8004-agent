@@ -35,12 +35,12 @@
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/Eversmile12/create-trustless-agent.git"
+        "url": "git+https://github.com/AxLabs/create-8004-agent.git"
     },
     "bugs": {
-        "url": "https://github.com/Eversmile12/create-trustless-agent/issues"
+        "url": "https://github.com/AxLabs/create-8004-agent/issues"
     },
-    "homepage": "https://github.com/Eversmile12/create-trustless-agent#readme",
+    "homepage": "https://github.com/AxLabs/create-8004-agent#readme",
     "dependencies": {
         "@4mica/sdk": "^0.5.3",
         "@solana/web3.js": "^1.98.0",

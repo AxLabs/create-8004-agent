@@ -7,6 +7,7 @@ import { hasMinted, loadState, persistVerified } from "./state.js";
 import { buildRegistrationMetadata, encodeMetadataDataUri, parseAgentId } from "./metadata.js";
 import { verifyOnChain } from "./verify.js";
 import { discoverRegistryLogs } from "./discover.js";
+import { createMetadataStorage, metadataBackend, uriForStoragePreflight, } from "./storage/index.js";
 export function parseNeoxCliCommand(argv = process.argv.slice(2)) {
     const raw = argv.find((arg) => !arg.startsWith("-")) ?? "register";
     if (raw === "preflight" ||
@@ -32,8 +33,15 @@ export async function runNeoxRegistrationCli(config, argv = process.argv.slice(2
     const walletClient = createNeoxWalletClient(runtime.rpcUrl, account);
     const registry = runtime.registry ?? NEOX_T4_IDENTITY_REGISTRY;
     let state = loadState(projectDir, config.projectId, registry);
+    const backend = metadataBackend(config);
+    const needsPublication = !state.metadataStorage || !state.agentURI;
+    // Preflight validates selected storage without uploading. Registration validates
+    // before minting, but completed/resumable publications no longer need upload credentials.
+    const storagePreflightUri = command === "preflight" || command === "dry-run" || (command === "register" && needsPublication)
+        ? uriForStoragePreflight(config)
+        : undefined;
     const uriForEstimate = hasMinted(state)
-        ? encodeMetadataDataUri(buildRegistrationMetadata(config, parseAgentId(state.agentId), registry))
+        ? state.agentURI ?? storagePreflightUri ?? encodeMetadataDataUri(buildRegistrationMetadata(config, parseAgentId(state.agentId), registry))
         : undefined;
     if (command === "preflight" || command === "dry-run") {
         const report = await runPreflight({
@@ -72,6 +80,7 @@ export async function runNeoxRegistrationCli(config, argv = process.argv.slice(2
             registry,
             projectDir,
             config,
+            storage: needsPublication ? createMetadataStorage(config) : undefined,
         }, state);
     }
     if (command === "verify" && !hasMinted(state)) {
@@ -94,6 +103,7 @@ export async function runNeoxRegistrationCli(config, argv = process.argv.slice(2
         console.log(`Verified agentId ${verification.agentId}`);
         console.log(`  owner:        ${verification.owner}`);
         console.log(`  agentWallet:  ${verification.agentWallet}`);
+        console.log(`  metadata:     ${state.metadataStorage?.backend ?? backend}`);
         console.log(`  result:       ${resultPath}`);
     }
 }

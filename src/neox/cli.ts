@@ -19,6 +19,11 @@ import { buildRegistrationMetadata, encodeMetadataDataUri, parseAgentId } from "
 import { verifyOnChain } from "./verify.js";
 import { discoverRegistryLogs } from "./discover.js";
 import type { AgentProjectConfig } from "./types.js";
+import {
+    createMetadataStorage,
+    metadataBackend,
+    uriForStoragePreflight,
+} from "./storage/index.js";
 
 export type NeoxCliCommand = "preflight" | "dry-run" | "register" | "verify" | "logs";
 
@@ -54,10 +59,19 @@ export async function runNeoxRegistrationCli(
     const registry = runtime.registry ?? NEOX_T4_IDENTITY_REGISTRY;
     let state = loadState(projectDir, config.projectId, registry);
 
+    const backend = metadataBackend(config);
+    const needsPublication = !state.metadataStorage || !state.agentURI;
+    // Preflight validates selected storage without uploading. Registration validates
+    // before minting, but completed/resumable publications no longer need upload credentials.
+    const storagePreflightUri =
+        command === "preflight" || command === "dry-run" || (command === "register" && needsPublication)
+            ? uriForStoragePreflight(config)
+            : undefined;
+
     const uriForEstimate = hasMinted(state)
-        ? encodeMetadataDataUri(
-              buildRegistrationMetadata(config, parseAgentId(state.agentId!), registry)
-          )
+        ? state.agentURI ?? storagePreflightUri ?? encodeMetadataDataUri(
+            buildRegistrationMetadata(config, parseAgentId(state.agentId!), registry)
+        )
         : undefined;
 
     if (command === "preflight" || command === "dry-run") {
@@ -100,6 +114,7 @@ export async function runNeoxRegistrationCli(
                 registry,
                 projectDir,
                 config,
+                storage: needsPublication ? createMetadataStorage(config) : undefined,
             },
             state
         );
@@ -126,6 +141,7 @@ export async function runNeoxRegistrationCli(
         console.log(`Verified agentId ${verification.agentId}`);
         console.log(`  owner:        ${verification.owner}`);
         console.log(`  agentWallet:  ${verification.agentWallet}`);
+        console.log(`  metadata:     ${state.metadataStorage?.backend ?? backend}`);
         console.log(`  result:       ${resultPath}`);
     }
 }

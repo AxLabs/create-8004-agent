@@ -8,9 +8,19 @@ import { generateProject } from "../src/generator.js";
 import { isNeoxChain, NEOX_T4_CHAIN_ID, NEOX_T4_IDENTITY_REGISTRY } from "../src/neox/constants.js";
 import { IDENTITY_REGISTRY_ABI } from "../src/neox/abi.js";
 import type { WizardAnswers } from "../src/wizard.js";
+import { wizardAnswersFromConfig } from "../src/generate-from-config.js";
 
 const execFileAsync = promisify(execFile);
 const OUTPUT_DIR = path.join(process.cwd(), "test-output", "neox-t4-generator");
+
+async function execChecked(command: string, args: string[], cwd: string): Promise<void> {
+    try {
+        await execFileAsync(command, args, { cwd, maxBuffer: 10 * 1024 * 1024 });
+    } catch (error) {
+        const details = error as Error & { stdout?: string; stderr?: string };
+        throw new Error(`${details.message}\n${details.stdout ?? ""}\n${details.stderr ?? ""}`);
+    }
+}
 
 function neoxAnswers(overrides: Partial<WizardAnswers> = {}): WizardAnswers {
     return {
@@ -44,22 +54,78 @@ describe("Neo X T4 chain configuration", () => {
         expect(isNeoxChain("monad-testnet")).toBe(false);
     });
 
-    it("embeds an ABI subset that matches IdentityRegistry.json", async () => {
-        const abiPath = path.resolve(process.cwd(), "../erc-8004-contracts/abis/IdentityRegistry.json");
-        const fullAbi = JSON.parse(await fs.readFile(abiPath, "utf8")) as Array<Record<string, unknown>>;
-
-        for (const fragment of IDENTITY_REGISTRY_ABI) {
-            const match = fullAbi.find((item) => {
-                if (item.type !== fragment.type || item.name !== fragment.name) return false;
-                if (fragment.type === "function") {
-                    const inputs = (item.inputs as Array<{ type: string }>) ?? [];
-                    const expected = fragment.inputs ?? [];
-                    return inputs.length === expected.length && inputs.every((input, i) => input.type === expected[i].type);
-                }
-                return true;
-            });
-            expect(match, `${fragment.type} ${fragment.name}`).toBeDefined();
-        }
+    it("embeds the exact ABI surface used by the registration flow", () => {
+        const surface = IDENTITY_REGISTRY_ABI.map((fragment) => ({
+            type: fragment.type,
+            name: fragment.name,
+            inputs: "inputs" in fragment ? fragment.inputs.map((input) => input.type) : [],
+        }));
+        expect(surface).toMatchInlineSnapshot(`
+          [
+            {
+              "inputs": [],
+              "name": "name",
+              "type": "function",
+            },
+            {
+              "inputs": [],
+              "name": "getVersion",
+              "type": "function",
+            },
+            {
+              "inputs": [],
+              "name": "register",
+              "type": "function",
+            },
+            {
+              "inputs": [
+                "uint256",
+                "string",
+              ],
+              "name": "setAgentURI",
+              "type": "function",
+            },
+            {
+              "inputs": [
+                "uint256",
+              ],
+              "name": "ownerOf",
+              "type": "function",
+            },
+            {
+              "inputs": [
+                "uint256",
+              ],
+              "name": "tokenURI",
+              "type": "function",
+            },
+            {
+              "inputs": [
+                "uint256",
+              ],
+              "name": "getAgentWallet",
+              "type": "function",
+            },
+            {
+              "inputs": [
+                "uint256",
+                "string",
+                "address",
+              ],
+              "name": "Registered",
+              "type": "event",
+            },
+            {
+              "inputs": [
+                "uint256",
+                "string",
+                "address",
+              ],
+              "name": "URIUpdated",
+              "type": "event",
+            },
+          ]
+        `);
     });
 });
 
@@ -67,6 +133,11 @@ describe("Neo X T4 generator routing", () => {
     beforeAll(async () => {
         await fs.rm(OUTPUT_DIR, { recursive: true, force: true });
         await generateProject(neoxAnswers());
+        await generateProject(neoxAnswers({
+            projectDir: path.join(OUTPUT_DIR, "neofs-fixture"),
+            agentName: "NeoFS fixture",
+            metadataStorage: "neofs",
+        }));
     });
 
     it("generates a viem registration path instead of agent0-sdk", async () => {
@@ -87,6 +158,8 @@ describe("Neo X T4 generator routing", () => {
         expect(envExample).not.toMatch(/PRIVATE_KEY=0x[0-9a-fA-F]{64}/);
         expect(envExample).not.toContain("PINATA");
         expect(envExample).not.toContain("OPENAI");
+        expect(envExample).toContain("METADATA_STORAGE=inline");
+        expect(envExample).not.toContain("NEOFS_BEARER_TOKEN");
         expect(readme).toContain("GAS");
         expect(readme).toContain("https://xt4scan.ngd.network");
         expect(readme).not.toContain("8004scan.io");
@@ -94,17 +167,48 @@ describe("Neo X T4 generator routing", () => {
 
         const copied = await fs.readFile(path.join(projectDir, "src/neox/constants.ts"), "utf8");
         expect(copied).toContain("12227332");
+        expect(await fs.stat(path.join(projectDir, "src/neox/storage/neofs.ts"))).toBeDefined();
+    });
+
+    it("generates NeoFS config and secret-free placeholders through --config", async () => {
+        const answers = wizardAnswersFromConfig({
+            projectDir: "demo-agent",
+            agentName: "Neo X Demo Agent",
+            agentDescription: "ERC-8004 agent registered on Neo X T4",
+            chain: "neox-t4",
+            metadataStorage: "neofs",
+        });
+        expect(answers.metadataStorage).toBe("neofs");
+
+        const projectDir = path.join(OUTPUT_DIR, "neofs-fixture");
+        const envExample = await fs.readFile(path.join(projectDir, ".env.example"), "utf8");
+        const config = await fs.readFile(path.join(projectDir, "src/agent-config.ts"), "utf8");
+        const readme = await fs.readFile(path.join(projectDir, "README.md"), "utf8");
+        expect(envExample).toContain("METADATA_STORAGE=neofs");
+        expect(envExample).toContain("NEOFS_REST_GATEWAY=");
+        expect(envExample).toContain("NEOFS_CONTAINER_ID=");
+        expect(envExample).toContain("NEOFS_PUBLIC_GATEWAY=");
+        expect(envExample).toContain("NEOFS_BEARER_TOKEN=");
+        expect(config).toContain('metadataStorage: "neofs"');
+        expect(readme).toContain("publishes metadata to NeoFS");
+        expect(readme).not.toMatch(/NEOFS_BEARER_TOKEN=[^\s#]+/);
     });
 
     it(
-        "compiles the generated project",
+        "compiles generated inline and NeoFS projects",
         async () => {
-            const projectDir = path.join(OUTPUT_DIR, "identity-fixture");
-            await execFileAsync("npm", ["install", "--no-fund", "--no-audit"], {
-                cwd: projectDir,
-                maxBuffer: 10 * 1024 * 1024,
-            });
-            await execFileAsync("npx", ["tsc", "--noEmit"], { cwd: projectDir });
+            for (const fixture of ["identity-fixture", "neofs-fixture"]) {
+                const projectDir = path.join(OUTPUT_DIR, fixture);
+                const packageManager = process.env.TEST_PACKAGE_MANAGER === "pnpm" ? "pnpm" : "npm";
+                const installArgs = packageManager === "pnpm"
+                    ? ["install", "--no-frozen-lockfile"]
+                    : ["install", "--no-fund", "--no-audit"];
+                await execChecked(packageManager, installArgs, projectDir);
+                const compileArgs = packageManager === "pnpm"
+                    ? ["exec", "tsc", "--noEmit"]
+                    : ["exec", "--", "tsc", "--noEmit"];
+                await execChecked(packageManager, compileArgs, projectDir);
+            }
         },
         300000,
     );

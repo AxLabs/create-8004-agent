@@ -9,6 +9,8 @@ export function buildSecretFreeResult(state, verification) {
         owner: verification.owner,
         agentWallet: verification.agentWallet,
         finalURI: verification.tokenURI,
+        agentURI: verification.tokenURI,
+        metadataStorage: verification.metadataStorage,
         decodedMetadata: verification.decodedMetadata,
         transactionHashes: {
             register: state.registerTxHash,

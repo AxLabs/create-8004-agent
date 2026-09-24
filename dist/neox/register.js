@@ -2,9 +2,10 @@ import { IDENTITY_REGISTRY_ABI } from "./abi.js";
 import { explorerTxUrl } from "./constants.js";
 import { decodeRegisteredFromReceipt, decodeURIUpdatedFromReceipt, hasAgentId } from "./events.js";
 import { getNeoxFees } from "./fees.js";
-import { buildRegistrationMetadata, encodeMetadataDataUri, parseAgentId, } from "./metadata.js";
+import { buildRegistrationMetadata, parseAgentId, } from "./metadata.js";
 import { formatPreflight, runPreflight } from "./preflight.js";
-import { hasMinted, isComplete, persistMinted, persistPendingTx, persistUriSet, } from "./state.js";
+import { hasMinted, isComplete, persistMinted, persistMetadataPublished, persistPendingTx, persistUriSet, } from "./state.js";
+import { InlineMetadataStorage } from "./storage/inline.js";
 async function waitForReceipt(publicClient, hash) {
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     if (receipt.status === "reverted") {
@@ -80,8 +81,11 @@ async function broadcastSetUri(deps, state) {
         throw new Error("Cannot publish metadata without a minted agentId");
     }
     const agentId = parseAgentId(state.agentId);
-    const metadata = buildRegistrationMetadata(deps.config, agentId, deps.registry);
-    const uri = encodeMetadataDataUri(metadata);
+    if (!state.metadata || !state.metadataStorage || !state.agentURI) {
+        throw new Error("Cannot set agentURI before metadata has been published");
+    }
+    const metadata = state.metadata;
+    const uri = state.agentURI;
     const fees = await getNeoxFees(deps.publicClient);
     const hash = await deps.walletClient.writeContract({
         address: deps.registry,
@@ -110,27 +114,48 @@ export async function registerOrResume(deps, state) {
         console.log(`Registration already complete for agentId ${current.agentId}. Refusing to mint another identity.`);
         return current;
     }
-    const metadataForEstimate = hasMinted(current)
-        ? encodeMetadataDataUri(buildRegistrationMetadata(deps.config, parseAgentId(current.agentId), deps.registry))
-        : undefined;
-    const report = await runPreflight({
-        client: deps.publicClient,
-        registry: deps.registry,
-        signer: deps.signer,
-        state: current,
-        uriForEstimate: metadataForEstimate,
-    });
-    console.log(formatPreflight(report));
-    if (report.balanceWei === 0n) {
-        throw new Error(`Signer ${deps.signer} has 0 GAS on Neo X T4. Fund it before registering.`);
-    }
     if (!hasMinted(current)) {
+        const report = await runPreflight({
+            client: deps.publicClient,
+            registry: deps.registry,
+            signer: deps.signer,
+            state: current,
+        });
+        console.log(formatPreflight(report));
+        if (report.balanceWei === 0n) {
+            throw new Error(`Signer ${deps.signer} has 0 GAS on Neo X T4. Fund it before registering.`);
+        }
         current = await broadcastRegister(deps, current);
     }
     else {
         console.log(`Resuming metadata publication for agentId ${current.agentId}`);
     }
     if (!isComplete(current)) {
+        const agentId = parseAgentId(current.agentId);
+        const metadata = buildRegistrationMetadata(deps.config, agentId, deps.registry);
+        if (!current.metadataStorage || !current.agentURI) {
+            const storage = deps.storage ?? new InlineMetadataStorage();
+            const publication = await storage.publish({
+                metadata,
+                projectId: deps.config.projectId,
+                agentId,
+                chainId: current.chainId,
+                registry: deps.registry,
+            });
+            current = persistMetadataPublished(deps.projectDir, current, metadata, publication);
+            console.log(`  Published metadata using ${publication.backend}: ${publication.uri}`);
+        }
+        const report = await runPreflight({
+            client: deps.publicClient,
+            registry: deps.registry,
+            signer: deps.signer,
+            state: current,
+            uriForEstimate: current.agentURI,
+        });
+        console.log(formatPreflight(report));
+        if (report.balanceWei === 0n) {
+            throw new Error(`Signer ${deps.signer} has 0 GAS on Neo X T4. Fund it before registering.`);
+        }
         current = await broadcastSetUri(deps, current);
     }
     return current;

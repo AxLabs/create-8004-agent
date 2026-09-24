@@ -35,6 +35,7 @@ export interface WizardAnswers {
     agentWallet: string;
     generatedPrivateKey?: string;
     x402Provider?: X402Provider;
+    metadataStorage?: "inline" | "neofs";
     // OASF taxonomy (optional) - https://github.com/8004-org/oasf
     skills?: string[];
     domains?: string[];
@@ -59,6 +60,7 @@ interface RawAnswers {
     chain: ChainKey | SolanaChainKey;
     trustModels: TrustModel[];
     x402Provider?: X402Provider;
+    metadataStorage?: "inline" | "neofs";
 }
 
 function getX402Providers(chainKey?: ChainKey | SolanaChainKey): X402Provider[] {
@@ -143,6 +145,17 @@ export async function runWizard(): Promise<WizardAnswers> {
                 // EVM address validation
                 return /^0x[a-fA-F0-9]{40}$/.test(input) || "Enter a valid Ethereum address or leave empty";
             },
+        },
+        {
+            type: "list",
+            name: "metadataStorage",
+            message: "ERC-8004 metadata storage:",
+            choices: [
+                { name: "Inline data URI (no external storage required)", value: "inline" },
+                { name: "NeoFS REST gateway (requires gateway and container configuration)", value: "neofs" },
+            ],
+            default: "inline",
+            when: (ans: Partial<RawAnswers>) => ans.chain === "neox-t4",
         },
         {
             type: "checkbox",
@@ -246,6 +259,7 @@ export async function runWizard(): Promise<WizardAnswers> {
         agentWallet,
         generatedPrivateKey,
         x402Provider,
+        metadataStorage: answers.metadataStorage ?? "inline",
         // Default to false if A2A not selected (question was skipped)
         a2aStreaming: answers.a2aStreaming ?? false,
     };

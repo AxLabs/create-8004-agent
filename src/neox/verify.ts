@@ -7,6 +7,8 @@ import {
     registrationRefMatches,
 } from "./metadata.js";
 import type { AgentProjectConfig, RegistrationState, VerificationResult } from "./types.js";
+import { readHttpMetadata } from "./storage/neofs.js";
+import type { FetchLike } from "./storage/types.js";
 
 export async function verifyOnChain(args: {
     client: PublicClient;
@@ -14,6 +16,7 @@ export async function verifyOnChain(args: {
     state: RegistrationState;
     config: AgentProjectConfig;
     expectedOwner: Address;
+    fetchImpl?: FetchLike;
 }): Promise<VerificationResult> {
     if (args.state.agentId === undefined) {
         throw new Error("Cannot verify before minting an agentId");
@@ -45,7 +48,9 @@ export async function verifyOnChain(args: {
         throw new Error(`ownerOf(${args.state.agentId}) is ${owner}, expected ${args.expectedOwner}`);
     }
 
-    const decodedMetadata = decodeMetadataDataUri(tokenURI);
+    const decodedMetadata = tokenURI.startsWith("data:")
+        ? decodeMetadataDataUri(tokenURI)
+        : await readHttpMetadata(tokenURI, args.fetchImpl);
     const expected = args.state.metadata;
     const metadataMatches = expected ? metadataEquals(decodedMetadata, expected) : true;
     const registrationRefMatchesResult = registrationRefMatches(
@@ -72,5 +77,9 @@ export async function verifyOnChain(args: {
         decodedMetadata,
         metadataMatches,
         registrationRefMatches: registrationRefMatchesResult,
+        metadataStorage: args.state.metadataStorage ?? {
+            backend: tokenURI.startsWith("data:") ? "inline" : "neofs",
+            uri: tokenURI,
+        },
     };
 }

@@ -24,6 +24,7 @@ import { registerOrResume } from "../src/neox/register.js";
 import { emptyState, hasMinted, isComplete, saveState } from "../src/neox/state.js";
 import { NEOX_T4_IDENTITY_REGISTRY } from "../src/neox/constants.js";
 import type { AgentProjectConfig, RegistrationState } from "../src/neox/types.js";
+import { verifyOnChain } from "../src/neox/verify.js";
 
 const REGISTRY = NEOX_T4_IDENTITY_REGISTRY;
 const OTHER = "0x0000000000000000000000000000000000000abc" as Address;
@@ -155,6 +156,37 @@ describe("metadata encoding and readback", () => {
         expect(decoded).toEqual(metadata);
         expect(registrationRefMatches(decoded, 0n, REGISTRY)).toBe(true);
         expect(parseAgentId(decoded.registrations[0].agentId)).toBe(0n);
+    });
+
+    it("keeps inline registrations verifiable", async () => {
+        const metadata = buildRegistrationMetadata(CONFIG, 0n, REGISTRY);
+        const uri = encodeMetadataDataUri(metadata);
+        const state: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "uri-set",
+            agentId: "0",
+            owner: OWNER,
+            agentURI: uri,
+            metadata,
+            metadataStorage: { backend: "inline", uri },
+        };
+        const client = {
+            readContract: vi.fn().mockImplementation(({ functionName }: { functionName: string }) => {
+                if (functionName === "ownerOf" || functionName === "getAgentWallet") return OWNER;
+                if (functionName === "tokenURI") return uri;
+                throw new Error(`unexpected ${functionName}`);
+            }),
+        };
+        const result = await verifyOnChain({
+            client: client as never,
+            registry: REGISTRY,
+            state,
+            config: CONFIG,
+            expectedOwner: OWNER,
+        });
+        expect(result.metadataStorage.backend).toBe("inline");
+        expect(result.metadataMatches).toBe(true);
+        expect(result.registrationRefMatches).toBe(true);
     });
 });
 

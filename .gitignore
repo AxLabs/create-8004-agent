@@ -15,6 +15,12 @@
 # production
 /build
 /dist
+!/dist/
+/dist/*
+!/dist/neox/
+/dist/neox/*
+!/dist/neox/storage/
+!/dist/neox/storage/*
 
 # misc
 .DS_Store

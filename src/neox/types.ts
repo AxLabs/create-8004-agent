@@ -16,6 +16,16 @@ export interface AgentProjectConfig {
     chainId?: number;
     registry?: Address;
     rpcUrl?: string;
+    metadataStorage?: MetadataStorageBackend;
+}
+
+export type MetadataStorageBackend = "inline" | "neofs";
+
+export interface PublishedMetadata {
+    uri: string;
+    backend: MetadataStorageBackend;
+    containerId?: string;
+    objectId?: string;
 }
 
 export interface RegistrationRecord {
@@ -55,6 +65,7 @@ export interface RegistrationState {
     pendingTxHash?: Hex;
     pendingKind?: "register" | "setAgentURI";
     metadata?: AgentRegistrationMetadata;
+    metadataStorage?: PublishedMetadata;
     verifiedAt?: string;
 }
 
@@ -89,6 +100,7 @@ export interface VerificationResult {
     decodedMetadata: AgentRegistrationMetadata;
     metadataMatches: boolean;
     registrationRefMatches: boolean;
+    metadataStorage: PublishedMetadata;
 }
 
 export interface SecretFreeRegistrationResult {
@@ -98,6 +110,8 @@ export interface SecretFreeRegistrationResult {
     owner: Address;
     agentWallet: Address;
     finalURI: string;
+    agentURI: string;
+    metadataStorage: PublishedMetadata;
     decodedMetadata: AgentRegistrationMetadata;
     transactionHashes: {
         register?: Hex;

@@ -13,6 +13,7 @@ export interface GenerateConfigFile {
     agentWallet?: string;
     generatedPrivateKey?: string;
     skipInstall?: boolean;
+    metadataStorage?: "inline" | "neofs";
 }
 export declare function wizardAnswersFromConfig(raw: GenerateConfigFile): WizardAnswers;
 export declare function readGenerateConfigFile(configPath: string): GenerateConfigFile;

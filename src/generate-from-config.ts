@@ -16,6 +16,7 @@ export interface GenerateConfigFile {
     agentWallet?: string;
     generatedPrivateKey?: string;
     skipInstall?: boolean;
+    metadataStorage?: "inline" | "neofs";
 }
 
 export function wizardAnswersFromConfig(raw: GenerateConfigFile): WizardAnswers {
@@ -36,6 +37,7 @@ export function wizardAnswersFromConfig(raw: GenerateConfigFile): WizardAnswers 
         trustModels: raw.trustModels ?? [],
         agentWallet: raw.agentWallet ?? "",
         generatedPrivateKey: raw.generatedPrivateKey,
+        metadataStorage: raw.metadataStorage ?? "inline",
     };
 }
 

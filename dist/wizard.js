@@ -108,6 +108,17 @@ export async function runWizard() {
             },
         },
         {
+            type: "list",
+            name: "metadataStorage",
+            message: "ERC-8004 metadata storage:",
+            choices: [
+                { name: "Inline data URI (no external storage required)", value: "inline" },
+                { name: "NeoFS REST gateway (requires gateway and container configuration)", value: "neofs" },
+            ],
+            default: "inline",
+            when: (ans) => ans.chain === "neox-t4",
+        },
+        {
             type: "checkbox",
             name: "features",
             message: "Select features to include:",
@@ -204,6 +215,7 @@ export async function runWizard() {
         agentWallet,
         generatedPrivateKey,
         x402Provider,
+        metadataStorage: answers.metadataStorage ?? "inline",
         // Default to false if A2A not selected (question was skipped)
         a2aStreaming: answers.a2aStreaming ?? false,
     };

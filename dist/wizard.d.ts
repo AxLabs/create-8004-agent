@@ -12,6 +12,7 @@ export interface WizardAnswers {
     agentWallet: string;
     generatedPrivateKey?: string;
     x402Provider?: X402Provider;
+    metadataStorage?: "inline" | "neofs";
     skills?: string[];
     domains?: string[];
 }

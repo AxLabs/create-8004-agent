@@ -1,5 +1,5 @@
 import { type Address, type Hex, type TransactionReceipt } from "viem";
-import type { RegistrationState } from "./types.js";
+import type { PublishedMetadata, RegistrationState } from "./types.js";
 export declare function stateFilePath(projectDir?: string): string;
 export declare function emptyState(projectId: string, registry?: `0x${string}`): RegistrationState;
 export declare function loadState(projectDir: string, projectId: string, registry: Address): RegistrationState;
@@ -15,6 +15,7 @@ export declare function persistUriSet(projectDir: string, state: RegistrationSta
     receipt: Pick<TransactionReceipt, "transactionHash" | "blockNumber" | "blockHash">;
     metadata: RegistrationState["metadata"];
 }): RegistrationState;
+export declare function persistMetadataPublished(projectDir: string, state: RegistrationState, metadata: NonNullable<RegistrationState["metadata"]>, publication: PublishedMetadata): RegistrationState;
 export declare function persistVerified(projectDir: string, state: RegistrationState, agentWallet: Address): RegistrationState;
 export declare function isComplete(state: RegistrationState): boolean;
 export declare function hasMinted(state: RegistrationState): boolean;

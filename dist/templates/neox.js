@@ -39,13 +39,22 @@ export async function copyNeoxLibrary(projectPath) {
     await fs.mkdir(destDir, { recursive: true });
     const entries = await fs.readdir(sourceDir);
     const preferTs = entries.some((name) => name.endsWith(".ts"));
-    for (const name of entries) {
-        if (preferTs && !name.endsWith(".ts"))
-            continue;
-        if (!preferTs && !name.endsWith(".js") && !name.endsWith(".d.ts"))
-            continue;
-        await fs.copyFile(path.join(sourceDir, name), path.join(destDir, name));
-    }
+    const copyDirectory = async (source, destination) => {
+        await fs.mkdir(destination, { recursive: true });
+        for (const entry of await fs.readdir(source, { withFileTypes: true })) {
+            const from = path.join(source, entry.name);
+            const to = path.join(destination, entry.name);
+            if (entry.isDirectory()) {
+                await copyDirectory(from, to);
+            }
+            else if (preferTs
+                ? entry.name.endsWith(".ts")
+                : entry.name.endsWith(".js") || entry.name.endsWith(".d.ts")) {
+                await fs.copyFile(from, to);
+            }
+        }
+    };
+    await copyDirectory(sourceDir, destDir);
 }
 export function generateNeoxPackageJson(answers) {
     const scripts = {
@@ -90,6 +99,18 @@ export function generateNeoxPackageJson(answers) {
     }, null, 2);
 }
 export function generateNeoxEnvExample(_answers, chain) {
+    const storage = _answers.metadataStorage === "neofs"
+        ? `
+# NeoFS publication. The bearer token is optional for public-write containers.
+METADATA_STORAGE=neofs
+NEOFS_REST_GATEWAY=
+NEOFS_CONTAINER_ID=
+NEOFS_PUBLIC_GATEWAY=
+NEOFS_BEARER_TOKEN=
+`
+        : `
+METADATA_STORAGE=inline
+`;
     return `# Secret-free example. Copy to .env locally; never commit keys.
 # Provide exactly one of:
 PRIVATE_KEY=
@@ -99,6 +120,7 @@ PRIVATE_KEY_FILE=
 RPC_URL=${chain.rpcUrl}
 IDENTITY_REGISTRY=${NEOX_T4_IDENTITY_REGISTRY}
 CHAIN_ID=${chain.chainId}
+${storage}
 `;
 }
 export function generateNeoxAgentConfig(answers) {
@@ -113,6 +135,7 @@ export const AGENT_PROJECT_CONFIG: AgentProjectConfig = {
   image: ${JSON.stringify(image)},
   projectId: ${JSON.stringify(projectId)},
   registry: NEOX_T4_IDENTITY_REGISTRY,
+  metadataStorage: ${JSON.stringify(answers.metadataStorage ?? "inline")},
 };
 `;
 }
@@ -141,6 +164,7 @@ runNeoxRegistrationCli(AGENT_PROJECT_CONFIG).catch((error: unknown) => {
 export function generateNeoxReadme(answers, chain) {
     const hasA2A = hasFeature(answers, "a2a");
     const hasMCP = hasFeature(answers, "mcp");
+    const neofs = answers.metadataStorage === "neofs";
     return `# ${answers.agentName}
 
 ${answers.agentDescription}
@@ -175,6 +199,20 @@ export RPC_URL=${NEOX_T4_RPC_URL}
 
 The register script derives the public address locally and never prints the key.
 
+${neofs ? `This project publishes metadata to NeoFS. Configure the existing container and gateways in \`.env\`:
+
+\`\`\`env
+METADATA_STORAGE=neofs
+NEOFS_REST_GATEWAY=https://your-rest-gateway.example
+NEOFS_CONTAINER_ID=your-container-id
+NEOFS_PUBLIC_GATEWAY=https://your-public-gateway.example
+NEOFS_BEARER_TOKEN= # optional for a public-write container
+\`\`\`
+
+The REST gateway controls uploads. The public gateway must serve unauthenticated HTTPS reads. Never commit the bearer token.
+` : `Metadata uses the inline data-URI backend, so no external storage configuration is required.
+`}
+
 ## 3. Fund the signer with testnet GAS
 
 Address shown by \`npm run preflight\`. Faucet: ${NEOX_T4_FAUCET_URL}
@@ -198,7 +236,7 @@ npm run register
 This:
 
 1. Calls parameterless \`register()\` and decodes \`Registered\` from that receipt (agent ID 0 is valid).
-2. Encodes compact registration-v1 metadata as a \`data:application/json;base64,\` URI.
+2. ${neofs ? "Uploads compact registration-v1 JSON to NeoFS, reads it back through the public gateway, and persists the object IDs." : "Encodes compact registration-v1 metadata as a `data:application/json;base64,` URI."}
 3. Calls \`setAgentURI(agentId, uri)\`.
 4. Persists transaction hashes immediately and resumes metadata publication if minting already succeeded.
 5. Refuses to mint a second identity once this project has completed.
@@ -213,6 +251,7 @@ npm run verify
 \`\`\`
 
 Reads \`ownerOf\`, \`tokenURI\`, and \`getAgentWallet\`, then writes secret-free \`registration-result.json\`.
+For HTTP(S) URIs it also retrieves and validates the metadata and exact Neo X registration reference.
 
 ## Transaction links
 
@@ -245,6 +284,7 @@ export function generateNeoxGitignore() {
 dist/
 .env
 .registration-state.json
+registration-result.json
 *.log
 `;
 }

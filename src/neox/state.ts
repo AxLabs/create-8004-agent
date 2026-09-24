@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { getAddress, type Address, type Hex, type TransactionReceipt } from "viem";
 import { NEOX_T4_CHAIN_ID, NEOX_T4_IDENTITY_REGISTRY, STATE_FILE_NAME } from "./constants.js";
-import type { RegistrationStage, RegistrationState } from "./types.js";
+import type { PublishedMetadata, RegistrationStage, RegistrationState } from "./types.js";
 
 const TERMINAL_STAGES: RegistrationStage[] = ["uri-set", "verified"];
 
@@ -109,6 +109,22 @@ export function persistUriSet(
         setUriBlockHash: args.receipt.blockHash,
         pendingTxHash: undefined,
         pendingKind: undefined,
+    };
+    saveState(projectDir, next);
+    return next;
+}
+
+export function persistMetadataPublished(
+    projectDir: string,
+    state: RegistrationState,
+    metadata: NonNullable<RegistrationState["metadata"]>,
+    publication: PublishedMetadata
+): RegistrationState {
+    const next: RegistrationState = {
+        ...state,
+        metadata,
+        agentURI: publication.uri,
+        metadataStorage: publication,
     };
     saveState(projectDir, next);
     return next;

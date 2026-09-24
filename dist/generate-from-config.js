@@ -20,6 +20,7 @@ export function wizardAnswersFromConfig(raw) {
         trustModels: raw.trustModels ?? [],
         agentWallet: raw.agentWallet ?? "",
         generatedPrivateKey: raw.generatedPrivateKey,
+        metadataStorage: raw.metadataStorage ?? "inline",
     };
 }
 export function readGenerateConfigFile(configPath) {

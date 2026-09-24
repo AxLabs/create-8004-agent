@@ -68,6 +68,10 @@ function printNextSteps(answers: WizardAnswers, isSolana: boolean, neox: boolean
     if (neox) {
         console.log(chalk.gray("   - Set PRIVATE_KEY or PRIVATE_KEY_FILE"));
         console.log(chalk.gray("   - Optional: RPC_URL, IDENTITY_REGISTRY"));
+        if (answers.metadataStorage === "neofs") {
+            console.log(chalk.gray("   - Set NEOFS_REST_GATEWAY, NEOFS_CONTAINER_ID, and NEOFS_PUBLIC_GATEWAY"));
+            console.log(chalk.gray("   - Set NEOFS_BEARER_TOKEN only when the container requires it"));
+        }
         console.log(chalk.gray("   - Pinata and OpenAI are not required for Neo X identity registration"));
     } else {
         if (!answers.generatedPrivateKey) {

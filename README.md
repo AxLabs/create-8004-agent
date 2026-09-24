@@ -38,11 +38,17 @@ Before using the generator, ensure you have:
 
 ## Quick Start
 
+This AxLabs Neo X fork is not currently published as a separate npm package. To run the fork deterministically:
+
 ```bash
-npx create-8004-agent
+git clone https://github.com/AxLabs/create-8004-agent.git
+cd create-8004-agent
+npm ci
+npm run build
+node dist/index.js
 ```
 
-That's it! The wizard will guide you through creating your agent.
+The wizard will guide you through creating your agent. Do not use `npx create-8004-agent` for the Neo X demo; that package may resolve to upstream code without these changes.
 If you want 4mica-powered x402 payments, choose a supported chain (Ethereum Sepolia or Polygon Amoy), enable `x402 payments`, and select `4mica` as the provider when prompted.
 
 Noninteractive generation (same generator as the wizard):
@@ -141,7 +147,7 @@ npm run register
 
 **EVM chains:** Uploads metadata to IPFS and mints an NFT on the Identity Registry.
 
-**Neo X T4:** Uses direct viem calls. `npm run preflight` is read-only. `npm run register` calls parameterless `register()`, then publishes a base64 data URI with `setAgentURI`. No Pinata or OpenAI key is required. Resume is automatic if minting already succeeded. Explorer: [xt4scan](https://xt4scan.ngd.network). There is no 8004scan route for Neo X.
+**Neo X T4:** Uses direct viem calls. `npm run preflight` is read-only. `npm run register` calls parameterless `register()`, then publishes metadata through either the default inline data URI backend or a configured NeoFS REST gateway before calling `setAgentURI`. No Pinata or OpenAI key is required. Resume is automatic after minting and after a successful NeoFS upload. Explorer: [xt4scan](https://xt4scan.ngd.network). There is no 8004scan route for Neo X. See the [Neo X T4 demo runbook](docs/neox-t4-demo.md).
 
 **Solana:** Validates metadata using `buildRegistrationFileJson()`, uploads to IPFS, and mints a Metaplex Core NFT via the 8004 program.
 
