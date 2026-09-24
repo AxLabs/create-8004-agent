@@ -1,9 +1,9 @@
 import { NEOX_T4_FAUCET_URL, NEOX_T4_IDENTITY_REGISTRY, NEOX_T4_NATIVE_CURRENCY, explorerAddressUrl, } from "./constants.js";
 import { accountFromPrivateKey, createNeoxPublicClient, createNeoxWalletClient, loadPrivateKeyFromEnv, resolveRuntimeConfig, } from "./config.js";
 import { formatPreflight, runPreflight } from "./preflight.js";
-import { registerOrResume } from "./register.js";
+import { canReuseMetadataPublication, registerOrResume } from "./register.js";
 import { buildSecretFreeResult, writeSecretFreeResult } from "./result.js";
-import { hasMinted, loadState, persistVerified } from "./state.js";
+import { hasMinted, isComplete, loadState, persistVerified } from "./state.js";
 import { buildRegistrationMetadata, encodeMetadataDataUri, parseAgentId } from "./metadata.js";
 import { verifyOnChain } from "./verify.js";
 import { discoverRegistryLogs } from "./discover.js";
@@ -34,14 +34,20 @@ export async function runNeoxRegistrationCli(config, argv = process.argv.slice(2
     const registry = runtime.registry ?? NEOX_T4_IDENTITY_REGISTRY;
     let state = loadState(projectDir, config.projectId, registry);
     const backend = metadataBackend(config);
-    const needsPublication = !state.metadataStorage || !state.agentURI;
+    const intendedMetadata = hasMinted(state)
+        ? buildRegistrationMetadata(config, parseAgentId(state.agentId), registry)
+        : undefined;
+    const needsPublication = !isComplete(state) &&
+        (!intendedMetadata || !canReuseMetadataPublication(state, intendedMetadata));
     // Preflight validates selected storage without uploading. Registration validates
-    // before minting, but completed/resumable publications no longer need upload credentials.
+    // before minting, while completed or matching resumable publications need no upload credentials.
     const storagePreflightUri = command === "preflight" || command === "dry-run" || (command === "register" && needsPublication)
         ? uriForStoragePreflight(config)
         : undefined;
     const uriForEstimate = hasMinted(state)
-        ? state.agentURI ?? storagePreflightUri ?? encodeMetadataDataUri(buildRegistrationMetadata(config, parseAgentId(state.agentId), registry))
+        ? canReuseMetadataPublication(state, intendedMetadata)
+            ? state.agentURI
+            : storagePreflightUri ?? encodeMetadataDataUri(intendedMetadata)
         : undefined;
     if (command === "preflight" || command === "dry-run") {
         const report = await runPreflight({

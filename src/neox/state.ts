@@ -97,11 +97,12 @@ export function persistUriSet(
         agentURI: string;
         receipt: Pick<TransactionReceipt, "transactionHash" | "blockNumber" | "blockHash">;
         metadata: RegistrationState["metadata"];
+        complete?: boolean;
     }
 ): RegistrationState {
     const next: RegistrationState = {
         ...state,
-        stage: "uri-set",
+        stage: args.complete === false ? "minted" : "uri-set",
         agentURI: args.agentURI,
         metadata: args.metadata,
         setUriTxHash: args.receipt.transactionHash,

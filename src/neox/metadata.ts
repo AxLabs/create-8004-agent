@@ -68,8 +68,26 @@ export function decodeMetadataDataUri(uri: string): AgentRegistrationMetadata {
     if (!uri.startsWith(DATA_JSON_PREFIX)) {
         throw new Error(`tokenURI is not a base64 application/json data URI`);
     }
-    const json = Buffer.from(uri.slice(DATA_JSON_PREFIX.length), "base64").toString("utf8");
-    return JSON.parse(json) as AgentRegistrationMetadata;
+    const encoded = uri.slice(DATA_JSON_PREFIX.length);
+    const canonicalBase64 =
+        /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+    if (!encoded || encoded.length % 4 !== 0 || !canonicalBase64.test(encoded)) {
+        throw new Error("tokenURI contains invalid or noncanonical base64 metadata");
+    }
+
+    const bytes = Buffer.from(encoded, "base64");
+    if (bytes.toString("base64") !== encoded) {
+        throw new Error("tokenURI contains invalid or noncanonical base64 metadata");
+    }
+    const json = bytes.toString("utf8");
+    if (!Buffer.from(json, "utf8").equals(bytes)) {
+        throw new Error("tokenURI metadata is not valid UTF-8 JSON");
+    }
+    try {
+        return JSON.parse(json) as AgentRegistrationMetadata;
+    } catch {
+        throw new Error("tokenURI metadata is not valid JSON");
+    }
 }
 
 export function metadataEquals(actual: AgentRegistrationMetadata, expected: AgentRegistrationMetadata): boolean {

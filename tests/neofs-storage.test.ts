@@ -5,7 +5,11 @@ import { describe, expect, it, vi } from "vitest";
 import { encodeAbiParameters, encodeEventTopics, type Address, type Hex } from "viem";
 import { IDENTITY_REGISTRY_ABI } from "../src/neox/abi.js";
 import { NEOX_T4_IDENTITY_REGISTRY } from "../src/neox/constants.js";
-import { buildRegistrationMetadata } from "../src/neox/metadata.js";
+import {
+    buildRegistrationMetadata,
+    decodeMetadataDataUri,
+    encodeMetadataDataUri,
+} from "../src/neox/metadata.js";
 import { registerOrResume } from "../src/neox/register.js";
 import { buildSecretFreeResult } from "../src/neox/result.js";
 import { emptyState } from "../src/neox/state.js";
@@ -25,6 +29,24 @@ const CONFIG: AgentProjectConfig = {
     image: "https://example.com/agent.png",
     projectId: "neofs-test",
     metadataStorage: "neofs",
+    services: [
+        {
+            name: "A2A",
+            endpoint: "https://a.example/.well-known/agent-card.json",
+            version: "0.3.0",
+        },
+        {
+            name: "MCP",
+            endpoint: "https://a.example/mcp",
+            version: "2025-06-18",
+        },
+        {
+            name: "OASF",
+            endpoint: "https://github.com/8004-org/oasf",
+            skills: ["natural_language_processing/text_generation"],
+            domains: ["technology/software_engineering"],
+        },
+    ],
 };
 const STORAGE_CONFIG = {
     restGateway: "https://rest.example",
@@ -79,6 +101,12 @@ describe("NeoFS metadata storage", () => {
             "Content-Type": "application/json",
         });
         expect(JSON.parse(request.body as string)).toEqual(metadata);
+        expect(JSON.parse(request.body as string).services).toEqual(CONFIG.services);
+        expect(fetchImpl).toHaveBeenNthCalledWith(
+            2,
+            publication.uri,
+            { headers: { accept: "application/json" } }
+        );
     });
 
     it("requires all non-secret NeoFS settings", () => {
@@ -158,7 +186,7 @@ function publicClient(uri: string) {
 }
 
 describe("registration publication resume", () => {
-    it("persists a successful NeoFS upload and reuses it after setAgentURI fails", async () => {
+    it("reuses an unchanged NeoFS publication after setAgentURI fails", async () => {
         const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "neofs-resume-"));
         const uri = "https://public.example/v1/objects/container/by_id/object";
         const storage: MetadataStorage = {
@@ -215,9 +243,390 @@ describe("registration publication resume", () => {
         }, saved);
 
         expect(storage.publish).toHaveBeenCalledTimes(1);
+        expect(firstWallet.writeContract).toHaveBeenCalledWith(
+            expect.objectContaining({
+                functionName: "setAgentURI",
+                args: [7n, uri],
+            })
+        );
         expect(secondWallet.writeContract).toHaveBeenCalledTimes(1);
+        expect(secondWallet.writeContract).toHaveBeenCalledWith(
+            expect.objectContaining({
+                functionName: "setAgentURI",
+                args: [7n, uri],
+            })
+        );
         expect(completed.stage).toBe("uri-set");
         expect(completed.agentURI).toBe(uri);
+    });
+
+    it("replaces a stale NeoFS publication when services change", async () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "neofs-services-resume-"));
+        const configB: AgentProjectConfig = {
+            ...CONFIG,
+            services: CONFIG.services?.map((service) =>
+                service.name === "A2A"
+                    ? {
+                        ...service,
+                        endpoint: "https://b.example/.well-known/agent-card.json",
+                    }
+                    : service
+            ),
+        };
+        const metadataA = buildRegistrationMetadata(CONFIG, 7n, REGISTRY);
+        const metadataB = buildRegistrationMetadata(configB, 7n, REGISTRY);
+        const oldUri = "https://public.example/v1/objects/container-123/by_id/object-old";
+        const newUri = "https://public.example/v1/objects/container-123/by_id/object-new";
+        const minted: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "minted",
+            agentId: "7",
+            owner: OWNER,
+            agentURI: oldUri,
+            metadata: metadataA,
+            metadataStorage: {
+                backend: "neofs",
+                uri: oldUri,
+                containerId: "container-123",
+                objectId: "object-old",
+            },
+        };
+        const fetchImpl = vi.fn()
+            .mockResolvedValueOnce(uploadResponse({
+                container_id: "container-123",
+                object_id: "object-new",
+            }))
+            .mockResolvedValueOnce(uploadResponse(metadataB));
+        const storage = new NeofsMetadataStorage(STORAGE_CONFIG, fetchImpl);
+        const client = publicClient(newUri);
+        const wallet = {
+            writeContract: vi.fn().mockResolvedValue(`0x${"2".repeat(64)}` as Hex),
+            account: undefined,
+            chain: undefined,
+        };
+
+        const completed = await registerOrResume({
+            publicClient: client as never,
+            walletClient: wallet as never,
+            signer: OWNER,
+            registry: REGISTRY,
+            projectDir,
+            config: configB,
+            storage,
+        }, minted);
+
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
+        const uploadRequest = fetchImpl.mock.calls[0]?.[1] as RequestInit;
+        expect(JSON.parse(uploadRequest.body as string)).toEqual(metadataB);
+        expect(JSON.parse(uploadRequest.body as string).services).toEqual(configB.services);
+        expect(wallet.writeContract).toHaveBeenCalledTimes(1);
+        expect(wallet.writeContract).toHaveBeenCalledWith(
+            expect.objectContaining({
+                functionName: "setAgentURI",
+                args: [7n, newUri],
+            })
+        );
+        expect(client.simulateContract).toHaveBeenCalledWith(
+            expect.objectContaining({ args: [7n, newUri] })
+        );
+        expect(client.estimateContractGas).toHaveBeenCalledWith(
+            expect.objectContaining({ args: [7n, newUri] })
+        );
+        expect(completed.agentId).toBe("7");
+        expect(completed.agentURI).toBe(newUri);
+        expect(completed.metadata).toEqual(metadataB);
+        expect(completed.metadataStorage).toEqual({
+            backend: "neofs",
+            uri: newUri,
+            containerId: "container-123",
+            objectId: "object-new",
+        });
+
+        const saved = JSON.parse(
+            fs.readFileSync(path.join(projectDir, ".registration-state.json"), "utf8")
+        ) as RegistrationState;
+        expect(saved.agentURI).toBe(newUri);
+        expect(saved.metadata).toEqual(metadataB);
+        expect(saved.metadataStorage).toEqual(completed.metadataStorage);
+    });
+
+    it("fails explicitly instead of falling back inline when NeoFS storage is omitted", async () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "neofs-missing-storage-"));
+        const metadataA = buildRegistrationMetadata(CONFIG, 7n, REGISTRY);
+        const oldUri = "https://public.example/v1/objects/container-123/by_id/object-old";
+        const minted: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "minted",
+            agentId: "7",
+            owner: OWNER,
+            agentURI: oldUri,
+            metadata: metadataA,
+            metadataStorage: {
+                backend: "neofs",
+                uri: oldUri,
+                containerId: "container-123",
+                objectId: "object-old",
+            },
+        };
+        const configB: AgentProjectConfig = {
+            ...CONFIG,
+            services: CONFIG.services?.map((service) =>
+                service.name === "A2A"
+                    ? { ...service, endpoint: "https://b.example/.well-known/agent-card.json" }
+                    : service
+            ),
+        };
+        const wallet = { writeContract: vi.fn() };
+
+        await expect(registerOrResume({
+            publicClient: {} as never,
+            walletClient: wallet as never,
+            signer: OWNER,
+            registry: REGISTRY,
+            projectDir,
+            config: configB,
+        }, minted)).rejects.toThrow(/NeoFS metadata storage dependency is required/);
+        expect(wallet.writeContract).not.toHaveBeenCalled();
+    });
+
+    it("replaces a stale inline publication when services change", async () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "inline-services-resume-"));
+        const configB: AgentProjectConfig = {
+            ...CONFIG,
+            metadataStorage: "inline",
+            services: CONFIG.services?.map((service) =>
+                service.name === "MCP"
+                    ? { ...service, endpoint: "https://b.example/mcp" }
+                    : service
+            ),
+        };
+        const metadataA = buildRegistrationMetadata(CONFIG, 7n, REGISTRY);
+        const metadataB = buildRegistrationMetadata(configB, 7n, REGISTRY);
+        const oldUri = encodeMetadataDataUri(metadataA);
+        const newUri = encodeMetadataDataUri(metadataB);
+        const minted: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "minted",
+            agentId: "7",
+            owner: OWNER,
+            agentURI: oldUri,
+            metadata: metadataA,
+            metadataStorage: { backend: "inline", uri: oldUri },
+        };
+        const client = publicClient(newUri);
+        const wallet = {
+            writeContract: vi.fn().mockResolvedValue(`0x${"2".repeat(64)}` as Hex),
+            account: undefined,
+            chain: undefined,
+        };
+
+        const completed = await registerOrResume({
+            publicClient: client as never,
+            walletClient: wallet as never,
+            signer: OWNER,
+            registry: REGISTRY,
+            projectDir,
+            config: configB,
+        }, minted);
+
+        expect(wallet.writeContract).toHaveBeenCalledTimes(1);
+        expect(wallet.writeContract).toHaveBeenCalledWith(
+            expect.objectContaining({
+                functionName: "setAgentURI",
+                args: [7n, newUri],
+            })
+        );
+        expect(completed.agentId).toBe("7");
+        expect(completed.agentURI).not.toBe(oldUri);
+        expect(completed.metadataStorage).toEqual({
+            backend: "inline",
+            uri: newUri,
+        });
+        expect(decodeMetadataDataUri(completed.agentURI!)).toEqual(metadataB);
+        expect(decodeMetadataDataUri(completed.agentURI!).services).toEqual(configB.services);
+    });
+
+    it("completes a confirmed pending setAgentURI when metadata is unchanged", async () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "pending-uri-unchanged-"));
+        const uri = "https://public.example/v1/objects/container/by_id/object-a";
+        const metadata = buildRegistrationMetadata(CONFIG, 7n, REGISTRY);
+        const pending: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "set-uri-broadcast",
+            agentId: "7",
+            owner: OWNER,
+            agentURI: uri,
+            metadata,
+            metadataStorage: {
+                backend: "neofs",
+                uri,
+                containerId: "container",
+                objectId: "object-a",
+            },
+            pendingKind: "setAgentURI",
+            pendingTxHash: `0x${"1".repeat(64)}` as Hex,
+        };
+        const storage: MetadataStorage = {
+            backend: "neofs",
+            publish: vi.fn(),
+        };
+        const client = {
+            ...publicClient(uri),
+            getTransactionReceipt: vi.fn().mockResolvedValue(uriUpdatedReceipt(uri)),
+        };
+        const wallet = { writeContract: vi.fn() };
+
+        const completed = await registerOrResume({
+            publicClient: client as never,
+            walletClient: wallet as never,
+            signer: OWNER,
+            registry: REGISTRY,
+            projectDir,
+            config: CONFIG,
+            storage,
+        }, pending);
+
+        expect(completed.stage).toBe("uri-set");
+        expect(completed.agentURI).toBe(uri);
+        expect(storage.publish).not.toHaveBeenCalled();
+        expect(wallet.writeContract).not.toHaveBeenCalled();
+    });
+
+    it("refreshes metadata after a stale pending setAgentURI confirms", async () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "pending-uri-stale-"));
+        const configB: AgentProjectConfig = {
+            ...CONFIG,
+            services: CONFIG.services?.map((service) =>
+                service.name === "MCP"
+                    ? { ...service, endpoint: "https://b.example/mcp" }
+                    : service
+            ),
+        };
+        const metadataA = buildRegistrationMetadata(CONFIG, 7n, REGISTRY);
+        const metadataB = buildRegistrationMetadata(configB, 7n, REGISTRY);
+        const uriA = "https://public.example/v1/objects/container/by_id/object-a";
+        const uriB = "https://public.example/v1/objects/container/by_id/object-b";
+        const pending: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "set-uri-broadcast",
+            agentId: "7",
+            owner: OWNER,
+            agentURI: uriA,
+            metadata: metadataA,
+            metadataStorage: {
+                backend: "neofs",
+                uri: uriA,
+                containerId: "container",
+                objectId: "object-a",
+            },
+            pendingKind: "setAgentURI",
+            pendingTxHash: `0x${"1".repeat(64)}` as Hex,
+        };
+        const storage: MetadataStorage = {
+            backend: "neofs",
+            publish: vi.fn().mockResolvedValue({
+                backend: "neofs",
+                uri: uriB,
+                containerId: "container",
+                objectId: "object-b",
+            }),
+        };
+        const client = {
+            ...publicClient(uriB),
+            getTransactionReceipt: vi.fn().mockResolvedValue(uriUpdatedReceipt(uriA)),
+        };
+        const wallet = {
+            writeContract: vi.fn().mockResolvedValue(`0x${"2".repeat(64)}` as Hex),
+            account: undefined,
+            chain: undefined,
+        };
+
+        const completed = await registerOrResume({
+            publicClient: client as never,
+            walletClient: wallet as never,
+            signer: OWNER,
+            registry: REGISTRY,
+            projectDir,
+            config: configB,
+            storage,
+        }, pending);
+
+        expect(storage.publish).toHaveBeenCalledTimes(1);
+        expect(storage.publish).toHaveBeenCalledWith(
+            expect.objectContaining({ metadata: metadataB, agentId: 7n })
+        );
+        expect(wallet.writeContract).toHaveBeenCalledTimes(1);
+        expect(wallet.writeContract).toHaveBeenCalledWith(
+            expect.objectContaining({
+                functionName: "setAgentURI",
+                args: [7n, uriB],
+            })
+        );
+        expect(completed.agentId).toBe("7");
+        expect(completed.stage).toBe("uri-set");
+        expect(completed.agentURI).toBe(uriB);
+        expect(completed.metadata).toEqual(metadataB);
+    });
+
+    it("waits for a genuinely pending setAgentURI without broadcasting a duplicate", async () => {
+        const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "pending-uri-wait-"));
+        const uri = "https://public.example/v1/objects/container/by_id/object-a";
+        const metadata = buildRegistrationMetadata(CONFIG, 7n, REGISTRY);
+        const pendingHash = `0x${"1".repeat(64)}` as Hex;
+        const pending: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "set-uri-broadcast",
+            agentId: "7",
+            owner: OWNER,
+            agentURI: uri,
+            metadata,
+            metadataStorage: {
+                backend: "neofs",
+                uri,
+                containerId: "container",
+                objectId: "object-a",
+            },
+            pendingKind: "setAgentURI",
+            pendingTxHash: pendingHash,
+        };
+        let resolveReceipt!: (receipt: ReturnType<typeof uriUpdatedReceipt>) => void;
+        const waitForTransactionReceipt = vi.fn().mockReturnValue(
+            new Promise<ReturnType<typeof uriUpdatedReceipt>>((resolve) => {
+                resolveReceipt = resolve;
+            })
+        );
+        const client = {
+            ...publicClient(uri),
+            getTransactionReceipt: vi.fn().mockRejectedValue(new Error("not mined")),
+            getTransaction: vi.fn().mockResolvedValue({ hash: pendingHash }),
+            waitForTransactionReceipt,
+        };
+        const storage: MetadataStorage = {
+            backend: "neofs",
+            publish: vi.fn(),
+        };
+        const wallet = { writeContract: vi.fn() };
+
+        const resultPromise = registerOrResume({
+            publicClient: client as never,
+            walletClient: wallet as never,
+            signer: OWNER,
+            registry: REGISTRY,
+            projectDir,
+            config: CONFIG,
+            storage,
+        }, pending);
+
+        await vi.waitFor(() => expect(waitForTransactionReceipt).toHaveBeenCalledWith({
+            hash: pendingHash,
+        }));
+        expect(storage.publish).not.toHaveBeenCalled();
+        expect(wallet.writeContract).not.toHaveBeenCalled();
+
+        resolveReceipt(uriUpdatedReceipt(uri));
+        const completed = await resultPromise;
+        expect(completed.stage).toBe("uri-set");
+        expect(wallet.writeContract).not.toHaveBeenCalled();
     });
 });
 

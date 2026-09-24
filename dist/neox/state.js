@@ -65,7 +65,7 @@ export function persistMinted(projectDir, state, args) {
 export function persistUriSet(projectDir, state, args) {
     const next = {
         ...state,
-        stage: "uri-set",
+        stage: args.complete === false ? "minted" : "uri-set",
         agentURI: args.agentURI,
         metadata: args.metadata,
         setUriTxHash: args.receipt.transactionHash,

@@ -14,6 +14,7 @@ export declare function persistUriSet(projectDir: string, state: RegistrationSta
     agentURI: string;
     receipt: Pick<TransactionReceipt, "transactionHash" | "blockNumber" | "blockHash">;
     metadata: RegistrationState["metadata"];
+    complete?: boolean;
 }): RegistrationState;
 export declare function persistMetadataPublished(projectDir: string, state: RegistrationState, metadata: NonNullable<RegistrationState["metadata"]>, publication: PublishedMetadata): RegistrationState;
 export declare function persistVerified(projectDir: string, state: RegistrationState, agentWallet: Address): RegistrationState;

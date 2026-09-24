@@ -2,10 +2,34 @@ import { IDENTITY_REGISTRY_ABI } from "./abi.js";
 import { explorerTxUrl } from "./constants.js";
 import { decodeRegisteredFromReceipt, decodeURIUpdatedFromReceipt, hasAgentId } from "./events.js";
 import { getNeoxFees } from "./fees.js";
-import { buildRegistrationMetadata, parseAgentId, } from "./metadata.js";
+import { buildRegistrationMetadata, decodeMetadataDataUri, metadataEquals, parseAgentId, } from "./metadata.js";
 import { formatPreflight, runPreflight } from "./preflight.js";
 import { hasMinted, isComplete, persistMinted, persistMetadataPublished, persistPendingTx, persistUriSet, } from "./state.js";
 import { InlineMetadataStorage } from "./storage/inline.js";
+export function canReuseMetadataPublication(state, metadata) {
+    if (!state.metadata ||
+        !state.metadataStorage ||
+        !state.agentURI ||
+        state.metadataStorage.uri !== state.agentURI ||
+        !metadataEquals(state.metadata, metadata)) {
+        return false;
+    }
+    if (state.metadataStorage.backend === "inline") {
+        try {
+            return metadataEquals(decodeMetadataDataUri(state.agentURI), metadata);
+        }
+        catch {
+            return false;
+        }
+    }
+    return true;
+}
+function storageForPublication(deps) {
+    if (deps.config.metadataStorage === "neofs" && deps.storage?.backend !== "neofs") {
+        throw new Error("NeoFS metadata storage dependency is required when metadataStorage is \"neofs\"");
+    }
+    return deps.storage ?? new InlineMetadataStorage();
+}
 async function waitForReceipt(publicClient, hash) {
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     if (receipt.status === "reverted") {
@@ -46,10 +70,13 @@ export async function reconcilePending(deps, state) {
     }
     const agentId = parseAgentId(state.agentId ?? "0");
     const updated = decodeURIUpdatedFromReceipt(receipt, deps.registry, agentId);
+    const intendedMetadata = buildRegistrationMetadata(deps.config, agentId, deps.registry);
+    const publicationIsCurrent = canReuseMetadataPublication({ ...state, agentURI: updated.newURI }, intendedMetadata);
     return persistUriSet(deps.projectDir, state, {
         agentURI: updated.newURI,
         receipt,
         metadata: state.metadata,
+        complete: publicationIsCurrent,
     });
 }
 async function broadcastRegister(deps, state) {
@@ -110,9 +137,18 @@ async function broadcastSetUri(deps, state) {
 }
 export async function registerOrResume(deps, state) {
     let current = await reconcilePending(deps, state);
+    let metadata = hasMinted(current)
+        ? buildRegistrationMetadata(deps.config, parseAgentId(current.agentId), deps.registry)
+        : undefined;
     if (isComplete(current)) {
+        if (!metadata || !canReuseMetadataPublication(current, metadata)) {
+            throw new Error(`Registration is already complete for agentId ${current.agentId}, but current canonical metadata differs from the published URI. This command does not update completed registrations.`);
+        }
         console.log(`Registration already complete for agentId ${current.agentId}. Refusing to mint another identity.`);
         return current;
+    }
+    if (!hasMinted(current) && deps.config.metadataStorage === "neofs") {
+        storageForPublication(deps);
     }
     if (!hasMinted(current)) {
         const report = await runPreflight({
@@ -126,15 +162,16 @@ export async function registerOrResume(deps, state) {
             throw new Error(`Signer ${deps.signer} has 0 GAS on Neo X T4. Fund it before registering.`);
         }
         current = await broadcastRegister(deps, current);
+        metadata = buildRegistrationMetadata(deps.config, parseAgentId(current.agentId), deps.registry);
     }
     else {
         console.log(`Resuming metadata publication for agentId ${current.agentId}`);
     }
     if (!isComplete(current)) {
         const agentId = parseAgentId(current.agentId);
-        const metadata = buildRegistrationMetadata(deps.config, agentId, deps.registry);
-        if (!current.metadataStorage || !current.agentURI) {
-            const storage = deps.storage ?? new InlineMetadataStorage();
+        metadata ??= buildRegistrationMetadata(deps.config, agentId, deps.registry);
+        if (!canReuseMetadataPublication(current, metadata)) {
+            const storage = storageForPublication(deps);
             const publication = await storage.publish({
                 metadata,
                 projectId: deps.config.projectId,

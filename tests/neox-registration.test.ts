@@ -20,7 +20,7 @@ import {
     registrationRefMatches,
 } from "../src/neox/metadata.js";
 import { assertChainId, nextActionForState, readRegistryIdentity, runPreflight } from "../src/neox/preflight.js";
-import { registerOrResume } from "../src/neox/register.js";
+import { canReuseMetadataPublication, registerOrResume } from "../src/neox/register.js";
 import { emptyState, hasMinted, isComplete, saveState } from "../src/neox/state.js";
 import { NEOX_T4_IDENTITY_REGISTRY } from "../src/neox/constants.js";
 import type { AgentProjectConfig, RegistrationState } from "../src/neox/types.js";
@@ -164,6 +164,43 @@ describe("metadata encoding and readback", () => {
         expect(parseAgentId(decoded.registrations[0].agentId)).toBe(0n);
     });
 
+    it("rejects malformed, noncanonical, and non-JSON inline metadata", () => {
+        expect(() =>
+            decodeMetadataDataUri("data:application/json;base64,%%%%")
+        ).toThrow(/base64/);
+        expect(() =>
+            decodeMetadataDataUri("data:application/json;base64,e30")
+        ).toThrow(/base64/);
+        expect(() =>
+            decodeMetadataDataUri(
+                `data:application/json;base64,${Buffer.from("not json", "utf8").toString("base64")}`
+            )
+        ).toThrow(/JSON/);
+    });
+
+    it("only reuses a canonical inline URI containing the intended metadata", () => {
+        const metadata = buildRegistrationMetadata(CONFIG, 0n, REGISTRY);
+        const uri = encodeMetadataDataUri(metadata);
+        const state: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "minted",
+            agentId: "0",
+            agentURI: uri,
+            metadata,
+            metadataStorage: { backend: "inline", uri },
+        };
+
+        expect(canReuseMetadataPublication(state, metadata)).toBe(true);
+        expect(canReuseMetadataPublication({
+            ...state,
+            agentURI: "data:application/json;base64,%%%%",
+            metadataStorage: {
+                backend: "inline",
+                uri: "data:application/json;base64,%%%%",
+            },
+        }, metadata)).toBe(false);
+    });
+
     it("keeps inline registrations verifiable", async () => {
         const metadata = buildRegistrationMetadata(CONFIG, 0n, REGISTRY);
         const uri = encodeMetadataDataUri(metadata);
@@ -236,7 +273,12 @@ describe("resume after minting", () => {
         const complete: RegistrationState = {
             ...minted,
             stage: "verified",
+            metadata: buildRegistrationMetadata(CONFIG, 0n, REGISTRY),
             agentURI: encodeMetadataDataUri(buildRegistrationMetadata(CONFIG, 0n, REGISTRY)),
+            metadataStorage: {
+                backend: "inline",
+                uri: encodeMetadataDataUri(buildRegistrationMetadata(CONFIG, 0n, REGISTRY)),
+            },
         };
 
         expect(nextActionForState(minted)).toBe("setAgentURI");
@@ -257,6 +299,38 @@ describe("resume after minting", () => {
         );
         expect(writeContract).not.toHaveBeenCalled();
         expect(result.agentId).toBe("0");
+    });
+
+    it("does not silently update a completed registration when metadata changes", async () => {
+        const metadata = buildRegistrationMetadata(CONFIG, 0n, REGISTRY);
+        const uri = encodeMetadataDataUri(metadata);
+        const complete: RegistrationState = {
+            ...emptyState(CONFIG.projectId),
+            stage: "verified",
+            agentId: "0",
+            owner: OWNER,
+            metadata,
+            agentURI: uri,
+            metadataStorage: { backend: "inline", uri },
+        };
+        const changedConfig: AgentProjectConfig = {
+            ...CONFIG,
+            services: [{
+                name: "A2A",
+                endpoint: "https://changed.example/.well-known/agent-card.json",
+            }],
+        };
+        const writeContract = vi.fn();
+
+        await expect(registerOrResume({
+            publicClient: {} as never,
+            walletClient: { writeContract, chain: undefined, account: undefined } as never,
+            signer: OWNER,
+            registry: REGISTRY,
+            projectDir: os.tmpdir(),
+            config: changedConfig,
+        }, complete)).rejects.toThrow(/already complete.*differs/i);
+        expect(writeContract).not.toHaveBeenCalled();
     });
 
     it("persists agent ID 0 without treating it as empty", () => {
